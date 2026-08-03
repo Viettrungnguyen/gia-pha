@@ -1,443 +1,615 @@
 /**
- * @project NguyenDinhHoaNgai
+ * @project AncestorTree
  * @file src/components/people/person-form.tsx
- * @description Person form (create/edit)
- * @version 1.2.0
- * @updated 2026-07-24
+ * @description Person edit/create form component
+ * @version 1.1.0
+ * @updated 2026-02-25
  */
 
 'use client';
 
-import { useState } from 'react';
+import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
+import { personSchema, type PersonFormData, defaultPersonValues } from '@/lib/validations/person';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { ParentCombobox } from './parent-combobox';
-import { toast } from 'sonner';
-import { Loader2 } from 'lucide-react';
-import { useCreatePerson, useUpdatePerson } from '@/hooks/use-people';
-import { useCreateFamily, useAddChild } from '@/hooks/use-families';
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
+import { Loader2, Save } from 'lucide-react';
 import type { Person } from '@/types';
 
-const personSchema = z.object({
-  handle: z.string().max(50).optional().nullable(),
-  display_name: z.string().min(1, 'Bắt buộc').max(255),
-  first_name: z.string().max(100).optional().nullable(),
-  middle_name: z.string().max(100).optional().nullable(),
-  surname: z.string().min(1, 'Bắt buộc').max(100),
-  gender: z
-    .union([z.literal(1), z.literal(2)])
-    .optional()
-    .nullable(),
-  generation: z.coerce.number().int().min(1).max(20),
-  chi: z.coerce.number().int().min(1).optional().nullable(),
-  birth_year: z.coerce.number().int().optional().nullable(),
-  birth_place: z.string().max(255).optional().nullable(),
-  death_year: z.coerce.number().int().optional().nullable(),
-  death_lunar: z
-    .string()
-    .regex(/^\d{1,2}\/\d{1,2}$/, 'Định dạng DD/MM')
-    .optional()
-    .nullable()
-    .or(z.literal('')),
-  death_place: z.string().max(255).optional().nullable(),
-  is_living: z.boolean(),
-  occupation: z.string().max(255).optional().nullable(),
-  hometown: z.string().max(255).optional().nullable(),
-  phone: z.string().max(20).optional().nullable(),
-  zalo: z.string().max(50).optional().nullable(),
-  facebook: z.string().url('URL không hợp lệ').optional().nullable().or(z.literal('')),
-  email: z
-    .string()
-    .email()
-    .optional()
-    .nullable()
-    .or(z.literal('')),
-  address: z.string().max(500).optional().nullable(),
-  privacy_level: z.union([z.literal(0), z.literal(1), z.literal(2)]),
-  biography: z.string().max(5000).optional().nullable(),
-  notes: z.string().max(5000).optional().nullable(),
-});
-
-type FormValues = z.infer<typeof personSchema>;
-
-interface Props {
-  initial?: Person | null;
-  onSuccess: () => void;
+interface PersonFormProps {
+  person?: Person;
+  defaultValues?: Partial<PersonFormData>;
+  lockedGeneration?: number; // when set, generation field is auto-filled and read-only
+  onSubmit: (data: PersonFormData) => Promise<void>;
+  isLoading?: boolean;
 }
 
-const toNullable = <T extends string | number | undefined | null>(v: T): T extends '' ? null : T => {
-  if (v === '' || v === undefined) return null as T extends '' ? null : T;
-  return v as T extends '' ? null : T;
-};
-
-export function PersonForm({ initial, onSuccess }: Props) {
-  const createPerson = useCreatePerson();
-  const updatePerson = useUpdatePerson();
-  const createFamily = useCreateFamily();
-  const addChild = useAddChild();
-
-  const [fatherId, setFatherId] = useState<string | null>(null);
-  const [fatherName, setFatherName] = useState<string>('');
-  const [motherId, setMotherId] = useState<string | null>(null);
-  const [motherName, setMotherName] = useState<string>('');
-
-  const defaults: FormValues = initial
-    ? {
-        handle: initial.handle,
-        display_name: initial.display_name,
-        first_name: initial.first_name,
-        middle_name: initial.middle_name,
-        surname: initial.surname,
-        gender: initial.gender,
-        generation: initial.generation,
-        chi: initial.chi,
-        birth_year: initial.birth_year,
-        birth_place: initial.birth_place,
-        death_year: initial.death_year,
-        death_lunar: initial.death_lunar,
-        death_place: initial.death_place,
-        is_living: initial.is_living,
-        occupation: initial.occupation,
-        hometown: initial.hometown,
-        phone: initial.phone,
-        email: initial.email,
-        zalo: initial.zalo,
-        facebook: initial.facebook,
-        address: initial.address,
-        privacy_level: initial.privacy_level,
-        biography: initial.biography,
-        notes: initial.notes,
-      }
-    : {
-        handle: '',
-        display_name: '',
-        surname: 'Nguyễn Đình',
-        generation: 1,
-        is_living: true,
-        first_name: null,
-        middle_name: null,
-        gender: null,
-        chi: null,
-        birth_year: null,
-        birth_place: null,
-        death_year: null,
-        death_lunar: null,
-        death_place: null,
-        occupation: null,
-        hometown: null,
-        phone: null,
-        email: null,
-        zalo: null,
-        facebook: null,
-        address: null,
-        privacy_level: 0,
-        biography: null,
-        notes: null,
-      };
-
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-    setValue,
-    watch,
-  } = useForm<FormValues>({
-    resolver: zodResolver(personSchema),
-    defaultValues: defaults,
+export function PersonForm({ person, defaultValues: extraDefaults, lockedGeneration, onSubmit, isLoading }: PersonFormProps) {
+  const form = useForm<PersonFormData>({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    resolver: zodResolver(personSchema) as any,
+    defaultValues: person ? {
+      handle: person.handle,
+      display_name: person.display_name,
+      first_name: person.first_name || '',
+      middle_name: person.middle_name || '',
+      surname: person.surname || '',
+      pen_name: person.pen_name || '',
+      taboo_name: person.taboo_name || '',
+      gender: person.gender,
+      generation: person.generation,
+      chi: person.chi || undefined,
+      birth_date: person.birth_date || '',
+      birth_year: person.birth_year || undefined,
+      birth_place: person.birth_place || '',
+      death_date: person.death_date || '',
+      death_year: person.death_year || undefined,
+      death_place: person.death_place || '',
+      death_lunar: person.death_lunar || '',
+      is_living: person.is_living,
+      is_patrilineal: person.is_patrilineal,
+      phone: person.phone || '',
+      email: person.email || '',
+      zalo: person.zalo || '',
+      facebook: person.facebook || '',
+      address: person.address || '',
+      hometown: person.hometown || '',
+      occupation: person.occupation || '',
+      biography: person.biography || '',
+      notes: person.notes || '',
+      avatar_url: person.avatar_url || '',
+      privacy_level: person.privacy_level,
+    } : { ...defaultPersonValues, ...extraDefaults },
   });
 
-  const isLiving = watch('is_living');
-  const genderVal = watch('gender');
-  const privacyLevel = watch('privacy_level');
+  const isLiving = form.watch('is_living');
 
-  const onSubmit = async (values: FormValues) => {
-    try {
-        const cleanValues = {
-          handle: toNullable(values.handle),
-          display_name: values.display_name,
-        first_name: toNullable(values.first_name),
-        middle_name: toNullable(values.middle_name),
-        surname: values.surname,
-        gender: values.gender ?? null,
-        generation: values.generation,
-        chi: toNullable(values.chi),
-        birth_year: toNullable(values.birth_year),
-        birth_place: toNullable(values.birth_place),
-        death_year: toNullable(values.death_year),
-        death_lunar: toNullable(values.death_lunar),
-        death_place: toNullable(values.death_place),
-        is_living: values.is_living,
-        occupation: toNullable(values.occupation),
-        hometown: toNullable(values.hometown),
-        phone: toNullable(values.phone),
-        email: toNullable(values.email),
-        zalo: toNullable(values.zalo),
-        facebook: toNullable(values.facebook),
-        address: toNullable(values.address),
-        privacy_level: values.privacy_level,
-        biography: toNullable(values.biography),
-        notes: toNullable(values.notes),
-        avatar_url: null,
-      };
-
-      let personId: string;
-      if (initial) {
-        const updatePayload = { ...cleanValues, handle: cleanValues.handle ?? undefined };
-        const updated = await updatePerson.mutateAsync({ id: initial.id, input: updatePayload });
-        personId = updated.id;
-      } else {
-        const createPayload = { ...cleanValues, handle: cleanValues.handle ?? '' };
-        const created = await createPerson.mutateAsync(createPayload as Parameters<typeof createPerson.mutateAsync>[0]);
-        personId = created.id;
-
-        if (fatherId || motherId) {
-          const family = await createFamily.mutateAsync({
-            father_id: fatherId ?? undefined,
-            mother_id: motherId ?? undefined,
-          });
-          await addChild.mutateAsync({ familyId: family.id, personId });
-        }
-      }
-
-      toast.success(initial ? 'Đã cập nhật thành viên' : 'Đã thêm thành viên');
-      onSuccess();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Có lỗi xảy ra';
-      toast.error(message);
+  // Sync lockedGeneration into form whenever parent selection changes
+  useEffect(() => {
+    if (lockedGeneration !== undefined) {
+      form.setValue('generation', lockedGeneration, { shouldValidate: true });
     }
-  };
-
-  const isPending =
-    createPerson.isPending ||
-    updatePerson.isPending ||
-    createFamily.isPending ||
-    addChild.isPending;
+  }, [lockedGeneration, form]);
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2">
-        {initial ? (
-          <div className="space-y-2 sm:col-span-2">
-            <Label>Mã thành viên</Label>
-            <Input value={initial.handle} readOnly disabled />
-            <p className="text-xs text-muted-foreground">Mã này đã được tự sinh và không thể chỉnh sửa.</p>
-          </div>
-        ) : (
-          <div className="space-y-2 sm:col-span-2 rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-            Mã thành viên sẽ được tự sinh khi lưu (ví dụ: <code>ND019</code>).
-          </div>
-        )}
-        <div className="space-y-2">
-          <Label htmlFor="display_name">Tên hiển thị *</Label>
-          <Input
-            id="display_name"
-            {...register('display_name')}
-            placeholder="VD: Nguyễn Đình A"
-          />
-          {errors.display_name && (
-            <p className="text-xs text-destructive">{errors.display_name.message}</p>
-          )}
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="surname">Họ *</Label>
-          <Input id="surname" {...register('surname')} />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="middle_name">Tên đệm</Label>
-          <Input id="middle_name" {...register('middle_name')} />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="first_name">Tên</Label>
-          <Input id="first_name" {...register('first_name')} />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="gender">Giới tính</Label>
-          <Select
-            value={genderVal?.toString() ?? ''}
-            onValueChange={(v) => setValue('gender', parseInt(v) as 1 | 2)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Chọn" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="1">Nam</SelectItem>
-              <SelectItem value="2">Nữ</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="generation">Đời *</Label>
-          <Input id="generation" type="number" min={1} {...register('generation')} />
-          {errors.generation && (
-            <p className="text-xs text-destructive">{errors.generation.message}</p>
-          )}
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="chi">Chi</Label>
-          <Input id="chi" type="number" min={1} {...register('chi')} />
-        </div>
-      </div>
-
-      <div className="border-t pt-4">
-        <h3 className="mb-3 text-sm font-semibold">Thông tin sinh</h3>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="birth_year">Năm sinh</Label>
-            <Input id="birth_year" type="number" {...register('birth_year')} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="birth_place">Nơi sinh</Label>
-            <Input id="birth_place" {...register('birth_place')} />
-          </div>
-        </div>
-      </div>
-
-      <div className="border-t pt-4">
-        <div className="mb-3 flex items-center gap-2">
-          <input
-            type="checkbox"
-            id="is_living"
-            checked={isLiving}
-            onChange={(e) => setValue('is_living', e.target.checked)}
-            className="h-4 w-4 rounded border-gray-300"
-          />
-          <Label htmlFor="is_living" className="cursor-pointer">
-            Còn sống
-          </Label>
-        </div>
-        {!isLiving && (
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div className="space-y-2">
-              <Label htmlFor="death_year">Năm mất</Label>
-              <Input id="death_year" type="number" {...register('death_year')} />
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        {/* Basic Info */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Thông tin cơ bản</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="display_name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tên hiển thị *</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Nguyễn Văn A" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={form.control}
+                name="handle"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Handle *</FormLabel>
+                    <FormControl>
+                      <Input placeholder="nguyen-van-a" {...field} />
+                    </FormControl>
+                    <FormDescription>URL-friendly, không dấu</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="death_lunar">Ngày giỗ (DD/MM)</Label>
-              <Input id="death_lunar" {...register('death_lunar')} placeholder="VD: 15/7" />
-              {errors.death_lunar && (
-                <p className="text-xs text-destructive">{errors.death_lunar.message}</p>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <FormField
+                control={form.control}
+                name="surname"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Họ</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Đặng" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="middle_name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tên đệm</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Đình" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="first_name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tên</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Tài" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="pen_name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tên tự</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Tên tự (courtesy name)" {...field} />
+                    </FormControl>
+                    <FormDescription>Tên chữ dùng trong giao tiếp</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="taboo_name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tên húy</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Tên húy (taboo name)" {...field} />
+                    </FormControl>
+                    <FormDescription>Tên thật, kiêng gọi trực tiếp</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <FormField
+                control={form.control}
+                name="gender"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Giới tính *</FormLabel>
+                    <Select onValueChange={(v) => field.onChange(parseInt(v) as 1 | 2)} defaultValue={field.value?.toString()}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Chọn" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="1">Nam</SelectItem>
+                        <SelectItem value="2">Nữ</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="generation"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Đời *</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={20}
+                        {...field}
+                        disabled={lockedGeneration !== undefined}
+                        className={lockedGeneration !== undefined ? 'bg-muted text-muted-foreground' : ''}
+                      />
+                    </FormControl>
+                    {lockedGeneration !== undefined && (
+                      <FormDescription className="text-xs text-amber-600">
+                        Tự động từ đời cha/mẹ — không thể sửa
+                      </FormDescription>
+                    )}
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="chi"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Chi</FormLabel>
+                    <FormControl>
+                      <Input 
+                        type="number" 
+                        min={1} 
+                        max={10} 
+                        {...field} 
+                        value={field.value ?? ''} 
+                        onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="privacy_level"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Quyền riêng tư</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value?.toString()}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="0">Công khai</SelectItem>
+                        <SelectItem value="1">Thành viên</SelectItem>
+                        <SelectItem value="2">Riêng tư</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="flex gap-6">
+              <FormField
+                control={form.control}
+                name="is_living"
+                render={({ field }) => (
+                  <FormItem className="flex items-center space-x-2 space-y-0">
+                    <FormControl>
+                      <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                    </FormControl>
+                    <FormLabel className="font-normal">Còn sống</FormLabel>
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={form.control}
+                name="is_patrilineal"
+                render={({ field }) => (
+                  <FormItem className="flex items-center space-x-2 space-y-0">
+                    <FormControl>
+                      <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                    </FormControl>
+                    <FormLabel className="font-normal">Chính tộc (dòng cha)</FormLabel>
+                  </FormItem>
+                )}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Birth & Death */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Sinh / Mất</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <FormField
+                control={form.control}
+                name="birth_year"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Năm sinh</FormLabel>
+                    <FormControl>
+                      <Input 
+                        type="number" 
+                        placeholder="1990" 
+                        {...field}
+                        value={field.value ?? ''}
+                        onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="birth_date"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Ngày sinh</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="birth_place"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nơi sinh</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Hà Tĩnh" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {!isLiving && (
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <FormField
+                  control={form.control}
+                  name="death_year"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Năm mất</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="number" 
+                          placeholder="2020" 
+                          {...field}
+                          value={field.value ?? ''}
+                          onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="death_date"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Ngày mất</FormLabel>
+                      <FormControl>
+                        <Input type="date" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="death_lunar"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Ngày giỗ (Âm)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="15/7" {...field} />
+                      </FormControl>
+                      <FormDescription>DD/MM</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="death_place"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Nơi mất</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Hà Nội" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
+
+            <FormField
+              control={form.control}
+              name="hometown"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Quê quán</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Thạch Lâm, Thạch Hà, Hà Tĩnh" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
               )}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="death_place">Nơi mất</Label>
-              <Input id="death_place" {...register('death_place')} />
-            </div>
-          </div>
-        )}
-      </div>
+            />
+          </CardContent>
+        </Card>
 
-      <div className="border-t pt-4">
-        <h3 className="mb-3 text-sm font-semibold">Liên hệ</h3>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="phone">Điện thoại</Label>
-            <Input id="phone" {...register('phone')} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input id="email" type="email" {...register('email')} />
-            {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="zalo">Zalo</Label>
-            <Input id="zalo" {...register('zalo')} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="facebook">Facebook</Label>
-            <Input id="facebook" type="url" {...register('facebook')} placeholder="https://facebook.com/..." />
-            {errors.facebook && <p className="text-xs text-destructive">{errors.facebook.message}</p>}
-          </div>
-          <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="address">Địa chỉ</Label>
-            <Input id="address" {...register('address')} />
-          </div>
-          <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="privacy_level">Quyền riêng tư</Label>
-            <Select
-              value={String(privacyLevel)}
-              onValueChange={(value) => setValue('privacy_level', Number(value) as 0 | 1 | 2)}
-            >
-              <SelectTrigger id="privacy_level"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="0">Công khai hồ sơ, ẩn thông tin liên hệ</SelectItem>
-                <SelectItem value="1">Chỉ quản trị viên</SelectItem>
-                <SelectItem value="2">Riêng tư</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="hometown">Quê quán</Label>
-            <Input id="hometown" {...register('hometown')} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="occupation">Nghề nghiệp</Label>
-            <Input id="occupation" {...register('occupation')} />
-          </div>
-        </div>
-      </div>
-
-      {!initial && (
-        <div className="border-t pt-4">
-          <h3 className="mb-3 text-sm font-semibold">Quan hệ cha mẹ</h3>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>Cha</Label>
-              <ParentCombobox
-                selectedId={fatherId ?? undefined}
-                selectedName={fatherName}
-                onSelect={(id, name) => {
-                  setFatherId(id || null);
-                  setFatherName(name);
-                }}
+        {/* Contact */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Liên hệ</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="phone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Điện thoại</FormLabel>
+                    <FormControl>
+                      <Input placeholder="0912345678" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input type="email" placeholder="email@example.com" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="zalo"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Zalo</FormLabel>
+                    <FormControl>
+                      <Input placeholder="0912345678" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="facebook"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Facebook</FormLabel>
+                    <FormControl>
+                      <Input placeholder="https://facebook.com/username" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
             </div>
-            <div className="space-y-2">
-              <Label>Mẹ</Label>
-              <ParentCombobox
-                selectedId={motherId ?? undefined}
-                selectedName={motherName}
-                onSelect={(id, name) => {
-                  setMotherId(id || null);
-                  setMotherName(name);
-                }}
-              />
-            </div>
-          </div>
-          <p className="mt-2 text-xs text-muted-foreground">
-            Nếu chọn cả cha và mẹ, hệ thống sẽ tự tạo quan hệ gia đình.
-          </p>
-        </div>
-      )}
+            <FormField
+              control={form.control}
+              name="address"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Địa chỉ hiện tại</FormLabel>
+                  <FormControl>
+                    <Input placeholder="123 Đường ABC, Quận XYZ, TP.HCM" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </CardContent>
+        </Card>
 
-      <div className="border-t pt-4">
-        <div className="space-y-2">
-          <Label htmlFor="biography">Tiểu sử</Label>
-          <Textarea id="biography" rows={4} {...register('biography')} />
-        </div>
-        <div className="mt-3 space-y-2">
-          <Label htmlFor="notes">Ghi chú</Label>
-          <Textarea id="notes" rows={2} {...register('notes')} />
-        </div>
-      </div>
+        {/* Bio */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Tiểu sử & Ghi chú</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <FormField
+              control={form.control}
+              name="occupation"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Nghề nghiệp</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Giáo viên" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="biography"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Tiểu sử</FormLabel>
+                  <FormControl>
+                    <Textarea rows={4} placeholder="Giới thiệu về người này..." {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="notes"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Ghi chú</FormLabel>
+                  <FormControl>
+                    <Textarea rows={3} placeholder="Ghi chú thêm..." {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="avatar_url"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>URL Ảnh đại diện</FormLabel>
+                  <FormControl>
+                    <Input placeholder="https://example.com/avatar.jpg" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </CardContent>
+        </Card>
 
-      <div className="flex justify-end gap-2 border-t pt-4">
-        <Button type="submit" disabled={isPending}>
-          {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          {initial ? 'Cập nhật' : 'Thêm mới'}
-        </Button>
-      </div>
-    </form>
+        {/* Submit */}
+        <div className="flex justify-end gap-4">
+          <Button type="submit" disabled={isLoading}>
+            {isLoading ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Đang lưu...
+              </>
+            ) : (
+              <>
+                <Save className="h-4 w-4 mr-2" />
+                Lưu
+              </>
+            )}
+          </Button>
+        </div>
+      </form>
+    </Form>
   );
 }
