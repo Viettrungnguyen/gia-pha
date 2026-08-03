@@ -37,8 +37,8 @@ export async function getTreeData(): Promise<TreeData> {
 }
 
 export interface CreateFamilyInput {
-  father_id?: string;
-  mother_id?: string;
+  father_id?: string | null;
+  mother_id?: string | null;
   marriage_date?: string | null;
   marriage_place?: string | null;
   notes?: string | null;
@@ -49,6 +49,51 @@ export async function createFamily(input: CreateFamilyInput): Promise<Family> {
   const { data, error } = await supabase.from('families').insert(input).select().single();
   if (error) throw error;
   return data;
+}
+
+export async function findFamilyByPair(
+  fatherId: string | null,
+  motherId: string | null
+): Promise<Family | null> {
+  if (!fatherId && !motherId) return null;
+  const supabase = getSupabaseBrowserClient();
+  let query = supabase.from('families').select('*').limit(1);
+  if (fatherId) query = query.eq('father_id', fatherId);
+  else query = query.is('father_id', null);
+  if (motherId) query = query.eq('mother_id', motherId);
+  else query = query.is('mother_id', null);
+  const { data, error } = await query.maybeSingle();
+  if (error) throw error;
+  return data ?? null;
+}
+
+export async function ensureFamilyAndAddChild(input: {
+  fatherId: string | null;
+  motherId: string | null;
+  personId: string;
+  sortOrder?: number;
+}): Promise<{ family: Family; childId: string }> {
+  const { fatherId, motherId, personId, sortOrder = 0 } = input;
+  if (!fatherId && !motherId) {
+    throw new Error('Cần chọn ít nhất cha hoặc mẹ để thêm con vào gia đình');
+  }
+
+  const supabase = getSupabaseBrowserClient();
+
+  const existing = await findFamilyByPair(fatherId, motherId);
+  let family = existing;
+  if (!family) {
+    family = await createFamily({ father_id: fatherId, mother_id: motherId });
+  }
+
+  const { data: childRow, error: childErr } = await supabase
+    .from('children')
+    .insert({ family_id: family.id, person_id: personId, sort_order: sortOrder })
+    .select()
+    .single();
+  if (childErr) throw childErr;
+
+  return { family, childId: childRow.id };
 }
 
 export async function addChild(familyId: string, personId: string, sortOrder: number = 0): Promise<void> {

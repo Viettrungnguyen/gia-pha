@@ -17,6 +17,7 @@ export interface ImportPerson {
   gender?: 1 | 2 | null;
   generation?: number;
   chi?: number | null;
+  tree_label?: string | null;
   birth_year?: number | null;
   birth_place?: string | null;
   death_year?: number | null;
@@ -289,6 +290,7 @@ export function parseJson(text: string): ImportPayload {
       gender: (p.gender as 1 | 2 | null) ?? null,
       generation: (p.generation as number) ?? 1,
       chi: (p.chi as number | null) ?? null,
+      tree_label: (p.tree_label as string | null) ?? null,
       birth_year: (p.birth_year as number | null) ?? null,
       birth_place: (p.birth_place as string | null) ?? null,
       death_year: (p.death_year as number | null) ?? null,
@@ -352,6 +354,7 @@ export function toPersonRow(p: ImportPerson): Omit<Person, 'id' | 'created_at' |
     gender: p.gender ?? null,
     generation: p.generation ?? 1,
     chi: p.chi ?? null,
+    tree_label: p.tree_label ?? null,
     birth_date: null,
     birth_year: p.birth_year ?? null,
     birth_place: p.birth_place ?? null,

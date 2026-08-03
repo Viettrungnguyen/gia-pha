@@ -18,6 +18,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useCreatePerson, useUpdatePerson } from '@/hooks/use-people';
+import { useEnsureFamilyAndAddChild } from '@/hooks/use-families';
+import { ParentCombobox } from '@/components/people/parent-combobox';
 import {
   uploadAvatarFile,
   deleteAvatarFile,
@@ -41,6 +43,7 @@ const personSchema = z.object({
       z.number().int().min(1).max(10).nullish()
     )
     .transform((v) => (v === undefined || v === null || Number.isNaN(v as number) ? undefined : v)),
+  tree_label: z.string().trim().max(64).default(''),
   birth_year: z
     .preprocess(
       (v) => (v === '' || v === null ? undefined : v),
@@ -84,6 +87,7 @@ function toFormData(p: Person): PersonFormData {
     gender: (p.gender === 2 ? 2 : 1) as 1 | 2,
     generation: p.generation ?? 1,
     chi: p.chi ?? undefined,
+    tree_label: p.tree_label ?? '',
     birth_year: p.birth_year ?? undefined,
     birth_date: p.birth_date ?? '',
     birth_place: p.birth_place ?? '',
@@ -136,6 +140,7 @@ function toCreateInput(d: PersonFormData) {
     gender: d.gender,
     generation: d.generation,
     chi: toNull(d.chi),
+    tree_label: d.tree_label || null,
     birth_year: toNull(d.birth_year),
     birth_date: d.birth_date || null,
     birth_place: d.birth_place || null,
@@ -168,6 +173,7 @@ export function PersonForm({ initial, onSuccess }: PersonFormProps) {
   const isEdit = !!initial;
   const createPerson = useCreatePerson();
   const updatePerson = useUpdatePerson();
+  const ensureFamilyAndAddChild = useEnsureFamilyAndAddChild();
   const [serverError, setServerError] = useState<string | null>(null);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(
@@ -175,6 +181,10 @@ export function PersonForm({ initial, onSuccess }: PersonFormProps) {
   );
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const [removeAvatar, setRemoveAvatar] = useState(false);
+  const [fatherId, setFatherId] = useState<string>('');
+  const [fatherName, setFatherName] = useState<string>('');
+  const [motherId, setMotherId] = useState<string>('');
+  const [motherName, setMotherName] = useState<string>('');
 
   const {
     register,
@@ -279,6 +289,23 @@ export function PersonForm({ initial, onSuccess }: PersonFormProps) {
         }
         toast.success('Đã thêm thành viên mới');
       }
+
+      if (fatherId || motherId) {
+        if (saved.id === fatherId || saved.id === motherId) {
+          throw new Error('Không thể tự làm cha/mẹ của chính mình');
+        }
+        await ensureFamilyAndAddChild.mutateAsync({
+          fatherId: fatherId || null,
+          motherId: motherId || null,
+          personId: saved.id,
+        });
+        toast.success(
+          `Đã gắn ${saved.display_name} làm con của ${fatherName || '?'}${
+            motherName ? ` và ${motherName}` : ''
+          }`
+        );
+      }
+
       onSuccess();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Lỗi khi lưu';
@@ -287,7 +314,7 @@ export function PersonForm({ initial, onSuccess }: PersonFormProps) {
     }
   };
 
-  const isSaving = createPerson.isPending || updatePerson.isPending;
+  const isSaving = createPerson.isPending || updatePerson.isPending || ensureFamilyAndAddChild.isPending;
 
   const fieldError = (key: keyof PersonFormData) =>
     errors[key]?.message ? (
@@ -376,6 +403,17 @@ export function PersonForm({ initial, onSuccess }: PersonFormProps) {
             </div>
 
             <div>
+              <label className="text-sm font-medium">Nhãn trên cây</label>
+              <Input
+                placeholder="VD: Tổ cô, Chi trưởng, Tổ phụ..."
+                {...register('tree_label')}
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Hiển thị dưới tên trên cây gia phả. Bỏ trống nếu không cần.
+              </p>
+            </div>
+
+            <div>
               <label className="text-sm font-medium">Quyền riêng tư</label>
               <Select
                 value={privacy.toString()}
@@ -412,6 +450,44 @@ export function PersonForm({ initial, onSuccess }: PersonFormProps) {
               />
               Chính tộc (dòng cha)
             </label>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Cha mẹ (đời trước)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-xs text-muted-foreground">
+            Chọn cha hoặc mẹ (hoặc cả hai) ở đời trước để gắn {isEdit ? 'thành viên này' : 'người mới'}
+            vào cây gia phả. Bỏ trống nếu chưa rõ hoặc là tổ tiên xa.
+          </p>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div>
+              <label className="text-sm font-medium">Cha</label>
+              <ParentCombobox
+                selectedId={fatherId || undefined}
+                selectedName={fatherName}
+                onSelect={(id, name) => {
+                  setFatherId(id);
+                  setFatherName(name);
+                }}
+                placeholder="Tìm cha..."
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Mẹ</label>
+              <ParentCombobox
+                selectedId={motherId || undefined}
+                selectedName={motherName}
+                onSelect={(id, name) => {
+                  setMotherId(id);
+                  setMotherName(name);
+                }}
+                placeholder="Tìm mẹ..."
+              />
+            </div>
           </div>
         </CardContent>
       </Card>

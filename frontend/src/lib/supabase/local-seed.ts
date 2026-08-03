@@ -12,7 +12,7 @@ const T = '2026-01-01T00:00:00.000Z';
 
 const personDefaults: Omit<Person, 'id' | 'created_at' | 'updated_at'> = {
   handle: '', display_name: '', first_name: null, middle_name: null, surname: '',
-  gender: null, generation: 1, chi: null,
+  gender: null, generation: 1, chi: null, tree_label: null,
   birth_date: null, birth_year: null, birth_place: null,
   death_date: null, death_year: null, death_place: null, death_lunar: null,
   is_living: true, is_patrilineal: true,
@@ -70,12 +70,12 @@ const mkD = (id: string, data: Partial<Omit<ClanDocument, 'id' | 'created_at' | 
 // ═══════════════════════════════════════════════════════════════════════════
 
 // Đời 1
-const p1a = mkP('p_g1_father', { handle: 'G1F', display_name: 'Nguyễn Đình Tổ', first_name: 'Tổ', surname: 'Nguyễn Đình', gender: 1, generation: 1, birth_year: 1920, death_year: 1995, death_lunar: '15/7', is_living: false, is_patrilineal: true, occupation: 'Nông dân', hometown: 'Làng Hòa Ngãi, Thanh Liêm, Hà Nam', biography: 'Thủy tổ dòng họ Nguyễn Đình làng Hòa Ngãi.' });
-const p1b = mkP('p_g1_mother', { handle: 'G1M', display_name: 'Nguyễn Thị Bà', first_name: 'Bà', middle_name: 'Thị', surname: 'Nguyễn', gender: 2, generation: 1, birth_year: 1925, death_year: 2000, death_lunar: '20/3', is_living: false, is_patrilineal: false, occupation: 'Nội trợ', hometown: 'Làng Hòa Ngãi' });
+const p1a = mkP('p_g1_father', { handle: 'G1F', display_name: 'Nguyễn Đình Tổ', first_name: 'Tổ', surname: 'Nguyễn Đình', gender: 1, generation: 1, tree_label: 'Thủy tổ', birth_year: 1920, death_year: 1995, death_lunar: '15/7', is_living: false, is_patrilineal: true, occupation: 'Nông dân', hometown: 'Làng Hòa Ngãi, Thanh Liêm, Hà Nam', biography: 'Thủy tổ dòng họ Nguyễn Đình làng Hòa Ngãi.' });
+const p1b = mkP('p_g1_mother', { handle: 'G1M', display_name: 'Nguyễn Thị Bà', first_name: 'Bà', middle_name: 'Thị', surname: 'Nguyễn', gender: 2, generation: 1, tree_label: 'Tổ mẫu', birth_year: 1925, death_year: 2000, death_lunar: '20/3', is_living: false, is_patrilineal: false, occupation: 'Nội trợ', hometown: 'Làng Hòa Ngãi' });
 
 // Đời 2 — 3 con của đời 1
-const p2a = mkP('p_g2_a', { handle: 'G2A', display_name: 'Nguyễn Đình Hùng', first_name: 'Hùng', surname: 'Nguyễn Đình', gender: 1, generation: 2, chi: 1, birth_year: 1948, is_living: true, is_patrilineal: true, occupation: 'Bác sĩ', hometown: 'Hà Nội', phone: '0912345678' });
-const p2b = mkP('p_g2_b', { handle: 'G2B', display_name: 'Nguyễn Thị Lan', first_name: 'Lan', middle_name: 'Thị', surname: 'Nguyễn', gender: 2, generation: 2, chi: 1, birth_year: 1952, is_living: true, is_patrilineal: true, occupation: 'Giáo viên', hometown: 'Hà Nội' });
+const p2a = mkP('p_g2_a', { handle: 'G2A', display_name: 'Nguyễn Đình Hùng', first_name: 'Hùng', surname: 'Nguyễn Đình', gender: 1, generation: 2, chi: 1, tree_label: 'Trưởng nam chi 1', birth_year: 1948, is_living: true, is_patrilineal: true, occupation: 'Bác sĩ', hometown: 'Hà Nội', phone: '0912345678' });
+const p2b = mkP('p_g2_b', { handle: 'G2B', display_name: 'Nguyễn Thị Lan', first_name: 'Lan', middle_name: 'Thị', surname: 'Nguyễn', gender: 2, generation: 2, chi: 1, tree_label: 'Tổ cô', birth_year: 1952, is_living: true, is_patrilineal: true, occupation: 'Giáo viên', hometown: 'Hà Nội' });
 const p2c = mkP('p_g2_c', { handle: 'G2C', display_name: 'Nguyễn Đình Mạnh', first_name: 'Mạnh', surname: 'Nguyễn Đình', gender: 1, generation: 2, chi: 1, birth_year: 1955, is_living: true, is_patrilineal: true, occupation: 'Kỹ sư', hometown: 'TP HCM', phone: '0938765432' });
 // Vợ/chồng của 3 người đời 2 (lấy vợ/chồng ngoài họ)
 const p2d = mkP('p_g2_a_spouse', { handle: 'G2AS', display_name: 'Trần Thị Mai', first_name: 'Mai', middle_name: 'Thị', surname: 'Trần', gender: 2, generation: 2, birth_year: 1950, is_living: true, is_patrilineal: false, occupation: 'Kế toán', hometown: 'Ninh Bình' });
@@ -84,13 +84,13 @@ const p2e = mkP('p_g2_b_spouse', { handle: 'G2BS', display_name: 'Lê Văn Bình
 const p2f = mkP('p_g2_c_spouse', { handle: 'G2CS', display_name: 'Phạm Thị Hoa', first_name: 'Hoa', middle_name: 'Thị', surname: 'Phạm', gender: 2, generation: 2, birth_year: 1958, is_living: true, is_patrilineal: false, occupation: 'Giáo viên', hometown: 'Thanh Hóa' });
 
 // Đời 3 — 3 con của p2a (Hùng + Mai)
-const p3a = mkP('p_g3_a', { handle: 'G3A', display_name: 'Nguyễn Đình Tuấn', first_name: 'Tuấn', surname: 'Nguyễn Đình', gender: 1, generation: 3, chi: 1, birth_year: 1975, is_living: true, is_patrilineal: true, occupation: 'Lập trình viên', hometown: 'Hà Nội', email: 'tuan@example.vn', phone: '0981234567' });
+const p3a = mkP('p_g3_a', { handle: 'G3A', display_name: 'Nguyễn Đình Tuấn', first_name: 'Tuấn', surname: 'Nguyễn Đình', gender: 1, generation: 3, chi: 1, tree_label: 'Trưởng nam', birth_year: 1975, is_living: true, is_patrilineal: true, occupation: 'Lập trình viên', hometown: 'Hà Nội', email: 'tuan@example.vn', phone: '0981234567' });
 const p3b = mkP('p_g3_b', { handle: 'G3B', display_name: 'Nguyễn Thị Hương', first_name: 'Hương', middle_name: 'Thị', surname: 'Nguyễn', gender: 2, generation: 3, chi: 1, birth_year: 1978, is_living: true, is_patrilineal: true, occupation: 'Bác sĩ', hometown: 'Hà Nội' });
-const p3c = mkP('p_g3_c', { handle: 'G3C', display_name: 'Nguyễn Đình Hòa', first_name: 'Hòa', surname: 'Nguyễn Đình', gender: 1, generation: 3, chi: 1, birth_year: 1982, is_living: true, is_patrilineal: true, occupation: 'Kỹ sư xây dựng', hometown: 'Đà Nẵng', phone: '0976543210' });
+const p3c = mkP('p_g3_c', { handle: 'G3C', display_name: 'Nguyễn Đình Hòa', first_name: 'Hòa', surname: 'Nguyễn Đình', gender: 1, generation: 3, chi: 1, tree_label: 'Thứ nam', birth_year: 1982, is_living: true, is_patrilineal: true, occupation: 'Kỹ sư xây dựng', hometown: 'Đà Nẵng', phone: '0976543210' });
 const p3d = mkP('p_g3_a_spouse', { handle: 'G3AS', display_name: 'Hoàng Thị Linh', first_name: 'Linh', middle_name: 'Thị', surname: 'Hoàng', gender: 2, generation: 3, birth_year: 1978, is_living: true, is_patrilineal: false, occupation: 'Kế toán', hometown: 'Hà Nội' });
 
 // Đời 4 — 3 con của p3a (Tuấn + Linh)
-const p4a = mkP('p_g4_a', { handle: 'G4A', display_name: 'Nguyễn Đình An', first_name: 'An', surname: 'Nguyễn Đình', gender: 1, generation: 4, chi: 1, birth_year: 2005, is_living: true, is_patrilineal: true, occupation: 'Sinh viên', hometown: 'Hà Nội' });
+const p4a = mkP('p_g4_a', { handle: 'G4A', display_name: 'Nguyễn Đình An', first_name: 'An', surname: 'Nguyễn Đình', gender: 1, generation: 4, chi: 1, tree_label: 'Trưởng nam', birth_year: 2005, is_living: true, is_patrilineal: true, occupation: 'Sinh viên', hometown: 'Hà Nội' });
 const p4b = mkP('p_g4_b', { handle: 'G4B', display_name: 'Nguyễn Thị Bình', first_name: 'Bình', middle_name: 'Thị', surname: 'Nguyễn', gender: 2, generation: 4, chi: 1, birth_year: 2008, is_living: true, is_patrilineal: true, occupation: 'Học sinh', hometown: 'Hà Nội' });
 const p4c = mkP('p_g4_c', { handle: 'G4C', display_name: 'Nguyễn Đình Khôi', first_name: 'Khôi', surname: 'Nguyễn Đình', gender: 1, generation: 4, chi: 1, birth_year: 2012, is_living: true, is_patrilineal: true, occupation: 'Học sinh', hometown: 'Hà Nội' });
 

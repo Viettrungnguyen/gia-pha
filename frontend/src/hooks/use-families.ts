@@ -14,9 +14,11 @@ import {
   addChild,
   removeChild,
   deleteFamily,
+  ensureFamilyAndAddChild,
   type TreeData,
   type CreateFamilyInput,
 } from '@/lib/supabase-data-families';
+import type { Family } from '@/types';
 
 export function useTreeData() {
   const { user, isLoading } = useAuth();
@@ -32,6 +34,23 @@ export function useCreateFamily() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: CreateFamilyInput) => createFamily(input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['tree-data'] }),
+  });
+}
+
+export function useEnsureFamilyAndAddChild() {
+  const qc = useQueryClient();
+  return useMutation<
+    { family: Family; childId: string },
+    Error,
+    {
+      fatherId: string | null;
+      motherId: string | null;
+      personId: string;
+      sortOrder?: number;
+    }
+  >({
+    mutationFn: ensureFamilyAndAddChild,
     onSuccess: () => qc.invalidateQueries({ queryKey: ['tree-data'] }),
   });
 }

@@ -16,6 +16,7 @@ export interface Person {
   gender: 1 | 2 | null;
   generation: number;
   chi: number | null;
+  tree_label: string | null;
   birth_date: string | null;
   birth_year: number | null;
   birth_place: string | null;

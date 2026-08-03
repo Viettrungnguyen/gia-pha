@@ -44,8 +44,8 @@ interface Props {
 }
 
 const NODE_WIDTH = 160;
-const NODE_HEIGHT = 100;
-const LEVEL_HEIGHT = 165;
+const NODE_HEIGHT = 96;
+const LEVEL_HEIGHT = 175;
 const SIBLING_GAP = 20;
 const BRANCH_GAP = 60;
 const COUPLE_GAP = 16;
@@ -192,6 +192,21 @@ function TreeNode({ node, isSelected, onSelect, onToggleCollapse }: TreeNodeProp
           style={{ userSelect: 'none' }}
         >
           {line2}
+        </text>
+      )}
+
+      {person.tree_label && (
+        <text
+          x={centerX}
+          y={line2 ? y + 80 : y + 73}
+          textAnchor="middle"
+          fontSize={10}
+          fontWeight={700}
+          fill="#9a3412"
+          fontStyle="italic"
+          style={{ userSelect: 'none' }}
+        >
+          {person.tree_label}
         </text>
       )}
 
