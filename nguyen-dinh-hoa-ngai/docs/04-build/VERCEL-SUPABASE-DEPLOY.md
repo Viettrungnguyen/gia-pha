@@ -2,377 +2,391 @@
 project: NguyenDinhHoaNgai
 path: docs/04-build/VERCEL-SUPABASE-DEPLOY.md
 type: deploy-guide
-version: 1.0.0
-updated: 2026-08-03
-owner: "@dev-team"
+version: 1.1.0
+updated: 2026-07-23
+owner: minh-tam
 status: approved
 ---
 
-# Hướng dẫn Deploy Vercel + Supabase
+# Hướng dẫn Deploy lên Vercel + Supabase Cloud
 
-> Hướng dẫn từng bước triển khai **NguyenDinhHoaNgai** lên Vercel (frontend) và
-> Supabase Cloud (backend). Repo: `https://github.com/Viettrungnguyen/gia-pha`.
+> Triển khai **NguyenDinhHoaNgai** lên production với chi phí **$0/tháng**.
+> Stack: Vercel Hobby + Supabase Cloud Free.
 
-## 0. Tổng quan kiến trúc
+## Đường dẫn thật của project
 
 ```
-                    ┌────────────────────────────┐
-                    │   Vercel (sin1, Edge)      │
-   Trình duyệt ──▶  │   Next.js 16 (frontend)    │
-                    │   Root Directory: frontend │
-                    └────────────┬───────────────┘
-                                 │ HTTPS (anon JWT)
-                                 ▼
-                    ┌────────────────────────────┐
-                    │ Supabase Cloud (Singapore) │
-                    │  • Postgres + RLS          │
-                    │  • Auth (email/password)   │
-                    │  • Storage (media,         │
-                    │    clan-documents)         │
-                    └────────────────────────────┘
+C:\Users\Administrator\Documents\Proj\AncestorTree\nguyen-dinh-hoa-ngai\   ← root
+nguyen-dinh-hoa-ngai\frontend\                                              ← Next.js app
+nguyen-dinh-hoa-ngai\frontend\supabase\migrations\                          ← SQL migrations
+nguyen-dinh-hoa-ngai\frontend\supabase\seed.sql                             ← seed data
 ```
 
-- **Frontend**: Vercel region `sin1` (Singapore).
-- **Backend**: Supabase region Singapore.
-- **3 env vars** cần thêm vào Vercel: `NEXT_PUBLIC_SUPABASE_URL`,
-  `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SITE_URL`.
-- **2 migration SQL** chạy thủ công trên Supabase SQL Editor.
-- **2 bucket Storage** công khai: `media`, `clan-documents`.
+Mọi lệnh dưới đây dùng **đường dẫn tuyệt đối** (Windows PowerShell) — copy/paste chạy được ngay.
 
----
+## 1. Tổng quan
 
-## 1. Chuẩn bị
-
-Trước khi bắt đầu, chuẩn bị:
-
-- [ ] Tài khoản GitHub `viettrungnguyen` đã có quyền push repo `gia-pha`.
-- [ ] Tài khoản Vercel (đăng ký bằng GitHub).
-- [ ] Tài khoản Supabase (đăng ký bằng GitHub).
-- [ ] Local đã `pnpm install` thành công và `pnpm dev` chạy được.
-
----
-
-## 2. Supabase
-
-### 2.1 Tạo project
-
-1. Mở https://supabase.com/dashboard → **New Project**.
-2. **Organization**: tạo mới `NguyenDinh` hoặc dùng cá nhân.
-3. **Project name**: `giapha-nguyen-dinh-hoa-ngai`.
-4. **Database Password**: ≥ 16 ký tự, lưu vào password manager (không commit).
-5. **Region**: chọn **Singapore** (khớp `sin1` của Vercel).
-6. **Pricing Plan**: Free cho development.
-7. Bấm **Create new project** → chờ 1-2 phút.
-
-Sau khi project ready, mở **Settings → API** và copy ra 2 giá trị:
-
-- **Project URL** (vd: `https://abcdefgh.supabase.co`)
-- **anon public key** (JWT bắt đầu bằng `eyJ...`)
-
-### 2.2 Chạy SQL migration
-
-Vào **SQL Editor → New query** (lặp lại 3 lần, mỗi lần dán nội dung 1 file rồi Run):
-
-| # | File trong repo | Mục đích |
-|---|------------------|----------|
-| 1 | `frontend/supabase/migrations/20260723000000_initial_schema.sql` | Tạo 6 bảng + RLS + indexes |
-| 2 | `frontend/supabase/migrations/20260724000001_restore_directory_privacy.sql` | RLS bổ sung cho directory/privacy |
-| 3 | `frontend/supabase/seed.sql` | 18 thành viên demo, 5 đời |
-
-Kiểm tra:
-
-```sql
--- Bảng `people` phải có 18 hàng
-SELECT COUNT(*) AS people_count FROM people;
+```
+[GitHub repo]  ──push──▶  [Vercel]  ──build──▶  https://giapha-...vercel.app
+                                  │
+                                  └──env──▶  Supabase Cloud (Singapore)
+                                              - Postgres  (6 tables + RLS)
+                                              - Storage   (media, clan-documents)
+                                              - Auth      (admin user)
 ```
 
-### 2.3 Tạo Storage buckets
+| Service | Tier | Chi phí | Region |
+|---------|------|---------|--------|
+| Vercel | Hobby | $0 | Edge global |
+| Supabase | Free | $0 | Singapore |
+| Domain (tuỳ chọn) | - | ~$10/năm | - |
+
+## 2. Checklist triển khai
+
+- [ ] Tạo Supabase Cloud project tại Singapore
+- [ ] Chạy migration `frontend/supabase/migrations/20260723000000_initial_schema.sql`
+- [ ] Chạy `frontend/supabase/seed.sql`
+- [ ] Tạo 2 buckets `media` + `clan-documents`
+- [ ] Tạo admin user + gán role `admin`
+- [ ] Push code lên GitHub
+- [ ] Import vào Vercel với **Root Directory = `frontend`**
+- [ ] Cấu hình 2 env vars
+- [ ] Cập nhật Site URL trong Supabase
+- [ ] Smoke test production
+
+## 3. Bước 1 — Tạo Supabase Cloud project
+
+1. Mở <https://supabase.com/dashboard>
+2. **New Project**:
+   - **Name:** `giapha-nguyen-dinh-hoa-ngai`
+   - **Database Password:** ≥ 16 ký tự (lưu lại)
+   - **Region:** **Singapore**
+   - **Plan:** Free
+3. Đợi 2 phút để provision xong.
+4. **Settings → API** copy 2 giá trị:
+   - `Project URL` → sẽ dán vào `NEXT_PUBLIC_SUPABASE_URL`
+   - `anon public` key → sẽ dán vào `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+
+## 4. Bước 2 — Chạy Migration + Seed
+
+### 4.1 Migration
+
+1. Mở file `C:\Users\Administrator\Documents\Proj\AncestorTree\nguyen-dinh-hoa-ngai\frontend\supabase\migrations\20260723000000_initial_schema.sql` bằng Notepad / VS Code.
+2. **Supabase Dashboard → SQL Editor → New query**.
+3. Ctrl+A file SQL → Ctrl+C → Paste vào editor → **Run** (Ctrl+Enter).
+4. Verify **Table Editor** có 6 bảng: `profiles`, `people`, `families`, `children`, `events`, `clan_documents`.
+
+### 4.2 Seed
+
+1. Mở `frontend\supabase\seed.sql` → copy toàn bộ.
+2. **SQL Editor → New query** → Paste → **Run**.
+3. Verify bảng `people` có 18 rows.
+
+## 5. Bước 3 — Tạo Storage buckets
 
 Vào **Storage → New bucket** (lặp lại 2 lần):
 
-| Bucket | Public | File size limit | Allowed MIME |
-|--------|--------|------------------|---------------|
-| `media` | ✓ | 50 MB | `image/*`, `video/mp4` |
-| `clan-documents` | ✓ | 50 MB | `image/*`, `application/pdf`, `video/mp4` |
+| Bucket name | Public | File size limit |
+|-------------|--------|-----------------|
+| `media` | ✓ | 50 MB |
+| `clan-documents` | ✓ | 50 MB |
 
-Sau khi tạo 2 bucket, vào **SQL Editor → New query**:
+> Mặc định RLS deny-all; cần thêm policy public read. Có thể dùng SQL:
+> ```sql
+> CREATE POLICY "Public read media" ON storage.objects FOR SELECT
+>   USING ( bucket_id IN ('media', 'clan-documents') );
+> ```
+> Hoặc vào **Storage → Policies → New Policy → SELECT → Allow → all users**.
 
-```sql
--- Cho phép đọc công khai (chỉ SELECT, không cần auth)
-CREATE POLICY "Public read media" ON storage.objects
-  FOR SELECT USING (bucket_id IN ('media', 'clan-documents'));
-```
+## 6. Bước 4 — Tạo Admin user
 
-### 2.4 Tạo admin user đầu tiên
+### 6.1 Tạo user
 
-1. **Authentication → Users → Add user → Create new user**:
+**Authentication → Users → Add user → Create new user**:
 
-   | Field | Value |
-   |-------|-------|
-   | Email | `admin@nguyen-dinh.local` |
-   | Password | `Admin@2026` (đổi sau lần đăng nhập đầu) |
-   | Auto Confirm User | ✓ bật |
+- **Email:** `admin@nguyen-dinh.local`
+- **Password:** `Admin@2026` (đổi sau lần đăng nhập đầu)
+- **Auto Confirm User:** ✓
 
-2. **SQL Editor → New query**:
+### 6.2 Gán role admin
+
+**SQL Editor → New query**, paste và Run:
 
 ```sql
 UPDATE profiles
 SET role = 'admin', full_name = 'Admin Nguyễn Đình'
 WHERE user_id = (
-  SELECT id FROM auth.users
-  WHERE email = 'admin@nguyen-dinh.local'
+  SELECT id FROM auth.users WHERE email = 'admin@nguyen-dinh.local'
 );
 ```
 
-> Không có đăng ký công khai. Mỗi admin mới phải tạo thủ công theo cách này.
+Verify:
 
-### 2.5 Cấu hình URL (làm sau khi deploy Vercel)
+```sql
+SELECT u.email, p.role, p.full_name
+FROM auth.users u
+JOIN profiles p ON p.user_id = u.id
+WHERE u.email = 'admin@nguyen-dinh.local';
+```
 
-Tạm thời bỏ qua bước này. Quay lại sau khi có URL Vercel (mục 3.4).
+→ phải trả về `role = 'admin'`.
 
----
+## 7. Bước 5 — Push code lên GitHub
 
-## 3. Vercel
+Mở **PowerShell**:
 
-### 3.1 Import project
+```powershell
+cd C:\Users\Administrator\Documents\Proj\AncestorTree\nguyen-dinh-hoa-ngai
 
-1. Đăng nhập https://vercel.com bằng GitHub `viettrungnguyen`.
-2. **Add New → Project**.
-3. **Import Git Repository**: chọn `Viettrungnguyen/gia-pha` → **Import**.
-4. Trong **Configure Project**:
+# Khởi tạo git (chỉ chạy nếu chưa có git)
+git init
+git add .
+git commit -m "feat: initial commit - NguyenDinhHoaNgai v1.0"
 
-   | Field | Value |
-   |-------|-------|
-   | Project Name | `gia-pha` |
-   | Framework Preset | Next.js (auto) |
-   | **Root Directory** | **`frontend`** ← bắt buộc |
-   | Build Command | `pnpm run build` |
-   | Install Command | `pnpm install` |
-   | Output Directory | `.next` |
+# Tạo repo trống trên GitHub: https://github.com/new
+# (KHÔNG tích "Initialize with README", KHÔNG thêm .gitignore, KHÔNG chọn license)
 
-5. Mở rộng **Environment Variables**, thêm 3 biến (chọn `Production`):
+# Kết nối với repo vừa tạo — THAY <username> bằng tài khoản GitHub của bạn
+git remote add origin https://github.com/<username>/NguyenDinhHoaNgai.git
+git branch -M main
+git push -u origin main
+```
 
-   | Name | Value | Environment |
-   |------|-------|--------------|
-   | `NEXT_PUBLIC_SUPABASE_URL` | `https://abcdefgh.supabase.co` | Production |
-   | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `eyJhbGciOiJIUzI1NiIsInR5cCI6...` | Production |
-   | `NEXT_PUBLIC_SITE_URL` | `https://gia-pha-[hash].vercel.app` | Production |
+Nếu dùng SSH thay HTTPS:
 
-   > Ghi `NEXT_PUBLIC_SITE_URL` tạm bằng URL Vercel dự đoán sẽ cấp (hash là chuỗi
-   > ngẫu nhiên). Sau khi deploy xong sẽ cập nhật lại cho khớp URL thực tế.
+```powershell
+git remote add origin git@github.com:<username>/NguyenDinhHoaNgai.git
+git push -u origin main
+```
 
-### 3.2 Deploy lần đầu
+## 8. Bước 6 — Deploy lên Vercel
 
-Bấm **Deploy** → chờ 2-3 phút.
+### 8.1 Import project
 
-Sau khi build thành công, Vercel sẽ cấp URL dạng `https://gia-pha-[hash].vercel.app`.
-Nếu muốn URL đẹp `gia-pha-eight.vercel.app` → mục 3.3.
+1. Mở <https://vercel.com> → **Sign Up with GitHub** (cùng account với repo).
+2. **Add New → Project** → chọn repo `NguyenDinhHoaNgai`.
+3. **Configure Project:**
 
-### 3.3 Gán lại domain (tuỳ chọn)
+| Field | Value |
+|-------|-------|
+| Project Name | `giapha-nguyen-dinh-hoa-ngai` |
+| Framework Preset | Next.js (auto) |
+| **Root Directory** | **`frontend`** ⚠️ **Bắt buộc** |
+| Build Command | `pnpm build` (mặc định) |
+| Install Command | `pnpm install` (mặc định) |
+| Output Directory | `.next` (mặc định) |
 
-1. **Project Settings → Domains**.
-2. Nhập `gia-pha` (không có phần mở rộng) → Vercel gợi ý `gia-pha.vercel.app` hoặc
-   `gia-pha-N.vercel.app` với `N` là số tự tăng.
-3. Bấm **Add** → đợi DNS cập nhật (~30 giây).
+4. **Environment Variables** — thêm 3 biến:
 
-URL chính thức bây giờ là `https://gia-pha-eight.vercel.app` (hoặc tương tự).
+| Name | Value |
+|------|-------|
+| `NEXT_PUBLIC_SUPABASE_URL` | `https://YOUR_PROJECT.supabase.co` |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `eyJhbGciOi...` |
+| `NEXT_PUBLIC_SITE_URL` | `https://giapha-nguyen-dinh-hoa-ngai.vercel.app` |
 
-### 3.4 Cập nhật Supabase Site URL
+5. Click **Deploy**.
 
-Quay lại **Supabase → Settings → API → URL Configuration**:
+### 8.2 Theo dõi build
 
-- **Site URL**: `https://gia-pha-eight.vercel.app`
-- **Additional Redirect URLs** (mỗi dòng một entry):
-  - `https://gia-pha-eight.vercel.app/**`
-  - `https://gia-pha-*.vercel.app/**` (cho Preview deployments)
+- Lần đầu: 2-3 phút
+- Sau đó mỗi lần push: 30-60 giây
 
-> Bước này bắt buộc. Nếu thiếu, middleware sẽ rơi vào vòng lặp redirect ở
-> `getUser()` và toàn bộ trang auth sẽ trả về 500.
+> **Tip:** Nếu build fail do `sharp` / `unrs-resolver`, vào Vercel **Settings → Build & Development Settings**, thêm vào **Install Command**:
+> ```
+> pnpm install --config.confirmModulesPurge=false
+> ```
+> Hoặc tạo file `frontend/.npmrc` trong repo với:
+> ```
+> public-hoist-pattern[]=*sharp*
+> ```
 
-### 3.5 Cập nhật env `NEXT_PUBLIC_SITE_URL`
+## 9. Bước 7 — Cập nhật Site URL trong Supabase
 
-Sau khi có URL chính thức, quay lại **Vercel → Settings → Environment Variables**,
-sửa `NEXT_PUBLIC_SITE_URL` cho đúng, rồi **Deployments → Redeploy**.
+Quan trọng — middleware redirect loop nếu thiếu bước này:
 
----
+1. **Supabase Dashboard → Settings → API → URL Configuration**
+2. **Site URL:** `https://giapha-nguyen-dinh-hoa-ngai.vercel.app`
+3. **Additional Redirect URLs:** thêm dòng
+   ```
+   https://giapha-nguyen-dinh-hoa-ngai.vercel.app/**
+   ```
+4. **Save**
 
-## 4. Smoke test
+## 10. Bước 8 — Smoke test production
 
-Mở trình duyệt, test theo thứ tự:
-
-### 4.1 Public pages (không cần đăng nhập)
+URL: `https://giapha-nguyen-dinh-hoa-ngai.vercel.app`
 
 | # | URL | Kỳ vọng |
 |---|-----|---------|
-| 1 | `/` | Hero + 4 section link, không lỗi 500 |
-| 2 | `/cay-gia-pha` | SVG cây gia phả render, có thể zoom/pan |
-| 3 | `/thanh-vien` | Grid 18 thành viên, ô tìm kiếm hoạt động |
-| 4 | `/thanh-vien/<id>` | Chi tiết thành viên + quan hệ cha/mẹ/vợ/chồng/con |
-| 5 | `/lich-cung-le` | Lịch tháng + danh sách sự kiện |
-| 6 | `/tai-lieu` | Grid tài liệu (hoặc empty state nếu chưa upload) |
-| 7 | `/robots.txt` | Trả về `Disallow: /admin/` |
-| 8 | `/sitemap.xml` | XML hợp lệ, ≥ 6 URL |
+| 1 | `/` | Hero + 4 section link |
+| 2 | `/cay-gia-pha` | SVG cây gia phả, 18 nodes |
+| 3 | `/thanh-vien` | 18 thành viên + search + filter |
+| 4 | `/thanh-vien/<id>` | Chi tiết + quan hệ |
+| 5 | `/lich-cung-le` | Calendar tháng hiện tại |
+| 6 | `/tai-lieu` | Grid tài liệu + filter |
+| 7 | `/dang-nhap` | Form login |
+| 8 | `/robots.txt` | `User-agent: * Allow: /` |
+| 9 | `/sitemap.xml` | XML sitemap hợp lệ |
 
-### 4.2 Admin pages (cần đăng nhập)
+Test admin:
 
-1. Vào `/dang-nhap` → email `admin@nguyen-dinh.local` / password `Admin@2026`.
-2. Tạo 1 thành viên mới ở `/admin/thanh-vien` → reload `/thanh-vien`, kiểm tra xuất hiện.
-3. Tạo 1 sự kiện ở `/admin/lich-cung-le` → reload `/lich-cung-le`, kiểm tra xuất hiện.
-4. Upload 1 ảnh (≤ 5 MB) ở `/admin/tai-lieu` → reload `/tai-lieu`, kiểm tra ảnh hiển thị.
-5. Đăng xuất → kiểm tra các trang public vẫn hoạt động.
+1. `/dang-nhap` → `admin@nguyen-dinh.local` / `Admin@2026`
+2. Redirect → `/admin` → 4 stats card
+3. `/admin/thanh-vien` → CRUD thử
+4. `/admin/lich-cung-le` → CRUD thử
+5. `/admin/tai-lieu` → Upload 1 ảnh → kiểm tra hiển thị ở `/tai-lieu`
+6. Click **Đăng xuất** → về `/`
 
-### 4.3 API health (tuỳ chọn)
+## 11. Lỗi thường gặp & cách xử lý
 
-```bash
-# Robots
-curl -I https://gia-pha-eight.vercel.app/robots.txt
+### 11.1 Build fail — "Cannot find module '@/...'"
 
-# Sitemap
-curl https://gia-pha-eight.vercel.app/sitemap.xml | head -n 5
+**Nguyên nhân:** Path alias không resolve.
+
+**Cách xử lý:**
+1. Mở `frontend\tsconfig.json`, kiểm tra có `"paths": { "@/*": ["./src/*"] }`.
+2. Mở `frontend\next.config.ts`, đảm bảo không có webpack override gây xung đột.
+
+### 11.2 Login fail — "Invalid login credentials"
+
+**Nguyên nhân:** User chưa confirm email.
+
+**Cách xử lý:**
+
+```sql
+UPDATE auth.users
+SET email_confirmed_at = NOW()
+WHERE email = 'admin@nguyen-dinh.local';
 ```
 
----
+### 11.3 Middleware redirect loop
 
-## 5. Xử lý lỗi thường gặp
+**Cách xử lý:**
+1. Verify `NEXT_PUBLIC_SUPABASE_URL` **không có trailing slash**.
+2. **Vercel → Deployments → Redeploy** sau khi sửa env.
+3. Clear browser cookies cho domain.
 
-### 5.1 Login fail — Invalid login credentials
+### 11.4 RLS deny INSERT khi CRUD
 
-- User chưa confirm email. Chạy SQL:
+**Cách xử lý:**
 
-  ```sql
-  UPDATE auth.users SET email_confirmed_at = NOW()
-  WHERE email = 'admin@nguyen-dinh.local';
-  ```
-- Password sai (phân biệt hoa/thường).
-- Email không tồn tại trong `auth.users`.
+```sql
+SELECT u.email, p.role
+FROM auth.users u
+LEFT JOIN profiles p ON p.user_id = u.id
+WHERE u.email = 'admin@nguyen-dinh.local';
 
-### 5.2 Middleware redirect loop
-
-Triệu chứng: mọi request đều trả về 307 liên tục.
-
-- `NEXT_PUBLIC_SUPABASE_URL` có dấu `/` ở cuối → xoá.
-- Supabase **Site URL** chưa khớp domain Vercel.
-- Cookie session bị hỏng → xoá cookie domain `vercel.app` rồi thử lại.
-- Sau khi sửa env, **Vercel → Deployments → Redeploy**.
-
-### 5.3 Build fail — Out of memory
-
-Đã xử lý trong `frontend/vercel.json` (`memory: 2048`). Nếu vẫn lỗi:
-
-- Vào **Settings → Functions → Advanced → Node Function Memory** = 2048.
-- Install Command: `pnpm install --config.confirmModulesPurge=false`.
-
-### 5.4 Storage upload fail — Bucket not found
-
-- Bucket chưa tạo → tạo lại theo mục 2.3.
-- Bucket name viết thường, không dấu gạch ngang ở đầu/cuối.
-
-### 5.5 Trang public trống, console báo "supabase url is invalid"
-
-- Env chưa inject lúc build. Kiểm tra 3 biến đã set cho **Production**.
-- **Redeploy** sau khi sửa env.
-
-### 5.6 RLS error — "new row violates row-level security policy"
-
-Triệu chứng: admin không insert/update được vào `people`, `events`, `clan_documents`.
-
-- `profiles.role` chưa được set = `'admin'`. Chạy lại SQL ở mục 2.4.
-- Policies RLS yêu cầu `auth.uid()` trong `profiles.role = 'admin'`.
-
-### 5.7 Storage RLS — Upload succeed nhưng không hiển thị public
-
-- Policy SELECT cho `storage.objects` chưa có. Chạy lại SQL mục 2.3.
-- Bucket `Public` chưa bật.
-
----
-
-## 6. CI/CD & quy trình sau triển khai
-
-### 6.1 Production
-
-```bash
-git push origin main
-# Vercel tự động build + deploy Production
-# Commit history xem tại https://github.com/Viettrungnguyen/gia-pha/commits/main
+UPDATE profiles SET role = 'admin'
+WHERE user_id = (SELECT id FROM auth.users WHERE email = 'admin@nguyen-dinh.local');
 ```
 
-### 6.2 Preview deployments
+### 11.5 Storage upload fail — "Bucket not found"
 
-```bash
-git checkout -b feature/them-trang-moi
-# sửa code
-git push origin feature/them-trang-moi
-# mở Pull Request trên GitHub
-# Vercel bot sẽ comment URL Preview dạng feature-them-trang-moi-gia-pha.vercel.app
+**Cách xử lý:** Tạo lại buckets `media` và `clan-documents` (xem Bước 3).
+
+### 11.6 Build chậm / OOM trên Free tier
+
+**Cách xử lý:** Tạo `frontend/vercel.json`:
+
+```json
+{
+  "build": { "memory": 2048 }
+}
 ```
 
-### 6.3 Rollback
+Commit + push → Vercel tự rebuild.
 
-- **Vercel → Deployments** → chọn bản cũ → menu ⋯ → **Promote to Production**.
-- Hoặc revert commit trên GitHub rồi push.
+### 11.7 Site URL redirect sai domain
+
+Sau khi đổi custom domain, **BẮT BUỘC** cập nhật lại **Supabase → Settings → API → Site URL** + **Additional Redirect URLs**.
+
+## 12. Custom Domain (tuỳ chọn)
+
+1. Mua domain (Cloudflare Registrar / Namecheap — ~$10/năm).
+2. **Vercel Dashboard → Settings → Domains → Add** → nhập domain.
+3. Cấu hình DNS theo hướng dẫn của Vercel.
+4. Đợi SSL provision (5-30 phút).
+5. Cập nhật lại **Supabase Site URL** sang domain mới.
+
+## 13. CI/CD workflow
+
+Mỗi lần push code → Vercel tự động:
+
+- Detect thay đổi → build
+- Branch ≠ `main` → tạo **Preview URL** (vd: `feature-x-nguyen-dinh.vercel.app`)
+- Merge vào `main` → tự động deploy **Production**
+
+Workflow khuyến nghị:
+
+```powershell
+# Branch mới
+git checkout -b feature/my-feature
+
+# Code, test local
+cd C:\Users\Administrator\Documents\Proj\AncestorTree\nguyen-dinh-hoa-ngai\frontend
+pnpm tsc
+
+# Commit + push
+cd ..
+git add .
+git commit -m "feat: add feature"
+git push origin feature/my-feature
+
+# Mở PR trên GitHub → Vercel tạo Preview URL → review → merge vào main
+# Production tự động deploy sau merge
+```
+
+## 14. Monitoring
+
+### Vercel Analytics
+
+**Vercel Dashboard → Analytics:** real-user pageviews, top pages, Web Vitals (LCP, FID, CLS).
+
+### Supabase Logs
+
+**Supabase Dashboard → Logs → API:** query count, slow queries (>1s), auth errors, storage errors.
+
+### Lighthouse Audit (chạy thủ công)
+
+```powershell
+npm install -g lighthouse
+lighthouse https://giapha-nguyen-dinh-hoa-ngai.vercel.app --view
+```
+
+**Target:**
+
+| Metric | Target |
+|--------|--------|
+| Performance | ≥ 90 |
+| Accessibility | ≥ 90 |
+| SEO | ≥ 90 |
+| Best Practices | ≥ 90 |
+
+## 15. Backup plan
+
+| Sự cố | Hành động |
+|-------|-----------|
+| Vercel down | Check <https://vercel.com/status>. Code ở GitHub, có thể deploy sang Netlify / Cloudflare Pages |
+| Supabase down | Check <https://status.supabase.com>. Data an toàn (Supabase backup daily) |
+| Cần rollback | `vercel rollback` hoặc **Deployments → chọn bản cũ → Promote to Production** |
+| Database xoá nhầm | **Supabase Dashboard → Database → Backups → Restore** (Free giữ 7 ngày) |
+
+## 16. Bảo trì định kỳ
+
+| Tần suất | Công việc |
+|----------|-----------|
+| Hàng tuần | Kiểm tra Supabase logs, tìm query chậm |
+| Hàng tháng | Review Vercel Analytics, xoá branch cũ trong GitHub |
+| Hàng quý | Đổi mật khẩu admin, rotate Supabase service key |
+| Hàng năm | Gia hạn domain, review chi phí |
+
+## 17. Tham chiếu
+
+- [LOCAL-DEVELOPMENT.md](./LOCAL-DEVELOPMENT.md) — Setup local
+- [Supabase Docs](https://supabase.com/docs) — Auth, RLS, Storage
+- [Next.js Deployment](https://nextjs.org/docs/app/building-your-application/deploying) — Vercel specifics
+- [Vercel Docs](https://vercel.com/docs) — Project config, env vars, domains
 
 ---
 
-## 7. Tùy chọn nâng cao
-
-### 7.1 Custom domain
-
-1. Mua domain (Cloudflare Registrar, Namecheap, v.v.).
-2. Vercel → **Settings → Domains → Add**: nhập `giapha.nguyen-dinh.com`.
-3. Trỏ DNS theo hướng dẫn Vercel (CNAME hoặc A record).
-4. Sau khi active, cập nhật **Supabase Site URL** và
-   `NEXT_PUBLIC_SITE_URL` cho khớp → Redeploy.
-
-### 7.2 Tự động backup database
-
-Vào **Supabase → Settings → Database → Backups** → bật **Point-in-time recovery**
-(7 ngày trên Plan Pro, 1 ngày trên Free).
-
-### 7.3 Monitoring
-
-- **Vercel → Analytics** → bật Web Analytics (free).
-- **Supabase → Logs** → xem API logs theo thời gian thực.
-- **Supabase → Reports** → số lượng auth users, DB size, storage usage.
-
-### 7.4 Thêm admin mới
-
-1. Supabase → **Authentication → Users → Add user** (email mới).
-2. SQL Editor:
-
-   ```sql
-   UPDATE profiles
-   SET role = 'admin'
-   WHERE user_id = (SELECT id FROM auth.users WHERE email = 'new-admin@nguyen-dinh.local');
-   ```
-
----
-
-## 8. Checklist triển khai
-
-Đánh dấu khi hoàn thành:
-
-- [ ] Supabase project tại Singapore đã tạo.
-- [ ] 2 file SQL migration + 1 file seed đã chạy thành công.
-- [ ] Bảng `people` có 18 bản ghi.
-- [ ] 2 Storage bucket `media`, `clan-documents` đã tạo (public).
-- [ ] Admin user đã tạo + `profiles.role = 'admin'`.
-- [ ] Vercel project đã import, Root Directory = `frontend`.
-- [ ] 3 env vars đã thêm (Production).
-- [ ] Vercel deploy đầu tiên thành công.
-- [ ] Supabase Site URL + Additional Redirect URLs đã trỏ về domain Vercel.
-- [ ] Smoke test 8 URL public + admin CRUD pass.
-- [ ] (Tuỳ chọn) custom domain đã gắn + DNS đã trỏ.
-- [ ] (Tuỳ chọn) Vercel Analytics đã bật.
-
----
-
-## 9. Liên hệ & tài liệu tham khảo
-
-- **Repo**: https://github.com/Viettrungnguyen/gia-pha
-- **Vercel Docs**: https://vercel.com/docs
-- **Supabase Docs**: https://supabase.com/docs
-- **Next.js Deploy**: https://nextjs.org/docs/app/building-your-application/deploying
-- **Tài liệu trong repo**:
-  - [DEPLOY-VERCEL.md](./DEPLOY-VERCEL.md) — bản rút gọn (cheat sheet).
-  - [LOCAL-DEVELOPMENT.md](./LOCAL-DEVELOPMENT.md) — phát triển cục bộ.
-  - [IMPLEMENTATION-PLAN.md](./IMPLEMENTATION-PLAN.md) — kế hoạch triển khai sprint.
+**🎉 Production URL của bạn đã live.** Chia sẻ với dòng họ qua Zalo / Facebook.
