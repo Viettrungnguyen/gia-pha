@@ -2,7 +2,7 @@
  * @project NguyenDinhHoaNgai
  * @file src/components/people/person-form.tsx
  * @description Person create/edit form using only existing UI primitives
- * @version 2.0.0
+ * @version 2.1.0
  * @updated 2026-08-03
  */
 
@@ -18,23 +18,43 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useCreatePerson, useUpdatePerson } from '@/hooks/use-people';
-import { Loader2, Save } from 'lucide-react';
+import {
+  uploadAvatarFile,
+  deleteAvatarFile,
+  validateAvatarFile,
+  MAX_AVATAR_BYTES,
+} from '@/lib/supabase-data-people';
+import { Loader2, Save, X } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Person } from '@/types';
 
 const personSchema = z.object({
-  handle: z.string().trim().min(1, 'Bắt buộc').max(64),
   display_name: z.string().trim().min(1, 'Bắt buộc').max(128),
   surname: z.string().trim().max(64).default(''),
   middle_name: z.string().trim().max(64).default(''),
   first_name: z.string().trim().max(64).default(''),
   gender: z.union([z.literal(1), z.literal(2)]),
   generation: z.coerce.number().int().min(1).max(20),
-  chi: z.union([z.coerce.number().int().min(1).max(10), z.nan()]).optional(),
-  birth_year: z.union([z.coerce.number().int().min(1000).max(3000), z.nan()]).optional(),
+  chi: z
+    .preprocess(
+      (v) => (v === '' || v === null ? undefined : v),
+      z.number().int().min(1).max(10).nullish()
+    )
+    .transform((v) => (v === undefined || v === null || Number.isNaN(v as number) ? undefined : v)),
+  birth_year: z
+    .preprocess(
+      (v) => (v === '' || v === null ? undefined : v),
+      z.number().int().min(1000).max(3000).nullish()
+    )
+    .transform((v) => (v === undefined || v === null || Number.isNaN(v as number) ? undefined : v)),
   birth_date: z.string().max(32).default(''),
   birth_place: z.string().max(128).default(''),
-  death_year: z.union([z.coerce.number().int().min(1000).max(3000), z.nan()]).optional(),
+  death_year: z
+    .preprocess(
+      (v) => (v === '' || v === null ? undefined : v),
+      z.number().int().min(1000).max(3000).nullish()
+    )
+    .transform((v) => (v === undefined || v === null || Number.isNaN(v as number) ? undefined : v)),
   death_date: z.string().max(32).default(''),
   death_place: z.string().max(128).default(''),
   death_lunar: z.string().max(16).default(''),
@@ -49,7 +69,7 @@ const personSchema = z.object({
   occupation: z.string().max(128).default(''),
   biography: z.string().max(4000).default(''),
   notes: z.string().max(2000).default(''),
-  avatar_url: z.string().url('URL không hợp lệ').or(z.literal('')).default(''),
+  avatar_url: z.string().default(''),
   privacy_level: z.union([z.literal(0), z.literal(1), z.literal(2)]),
 });
 
@@ -57,7 +77,6 @@ type PersonFormData = z.infer<typeof personSchema>;
 
 function toFormData(p: Person): PersonFormData {
   return {
-    handle: p.handle ?? '',
     display_name: p.display_name ?? '',
     surname: p.surname ?? '',
     middle_name: p.middle_name ?? '',
@@ -94,9 +113,22 @@ function toNull(v: number | undefined | null): number | null {
   return v;
 }
 
+function splitDisplayName(
+  displayName: string
+): { surname: string; middle_name: string; first_name: string } {
+  const words = displayName.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return { surname: '', middle_name: '', first_name: '' };
+  if (words.length === 1) return { surname: words[0], middle_name: '', first_name: '' };
+  if (words.length === 2) return { surname: words[0], middle_name: '', first_name: words[1] };
+  return {
+    surname: words[0],
+    middle_name: words.slice(1, -1).join(' '),
+    first_name: words[words.length - 1],
+  };
+}
+
 function toCreateInput(d: PersonFormData) {
   return {
-    handle: d.handle,
     display_name: d.display_name,
     surname: d.surname,
     middle_name: d.middle_name || null,
@@ -137,6 +169,12 @@ export function PersonForm({ initial, onSuccess }: PersonFormProps) {
   const createPerson = useCreatePerson();
   const updatePerson = useUpdatePerson();
   const [serverError, setServerError] = useState<string | null>(null);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(
+    initial?.avatar_url ?? null
+  );
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+  const [removeAvatar, setRemoveAvatar] = useState(false);
 
   const {
     register,
@@ -150,7 +188,6 @@ export function PersonForm({ initial, onSuccess }: PersonFormProps) {
     defaultValues: initial
       ? toFormData(initial)
       : {
-          handle: '',
           display_name: '',
           surname: 'Nguyễn Đình',
           middle_name: '',
@@ -160,22 +197,86 @@ export function PersonForm({ initial, onSuccess }: PersonFormProps) {
           is_living: true,
           is_patrilineal: true,
           privacy_level: 0,
+          avatar_url: '',
         },
   });
 
   const isLiving = watch('is_living');
   const gender = watch('gender');
   const privacy = watch('privacy_level');
+  const displayName = watch('display_name');
+
+  const handleDisplayNameBlur = () => {
+    const name = displayName?.trim() ?? '';
+    if (!name) return;
+    const split = splitDisplayName(name);
+    setValue('surname', split.surname, { shouldDirty: true });
+    setValue('middle_name', split.middle_name, { shouldDirty: true });
+    setValue('first_name', split.first_name, { shouldDirty: true });
+  };
+
+  const handleAvatarChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const err = validateAvatarFile(file);
+    if (err) {
+      setAvatarError(err);
+      setAvatarFile(null);
+      if (avatarPreview && avatarPreview.startsWith('blob:')) {
+        URL.revokeObjectURL(avatarPreview);
+      }
+      setAvatarPreview(initial?.avatar_url ?? null);
+      return;
+    }
+    setAvatarError(null);
+    setAvatarFile(file);
+    setRemoveAvatar(false);
+    if (avatarPreview && avatarPreview.startsWith('blob:')) {
+      URL.revokeObjectURL(avatarPreview);
+    }
+    setAvatarPreview(URL.createObjectURL(file));
+  };
+
+  const handleRemoveAvatar = () => {
+    if (avatarPreview && avatarPreview.startsWith('blob:')) {
+      URL.revokeObjectURL(avatarPreview);
+    }
+    setAvatarFile(null);
+    setAvatarPreview(null);
+    setAvatarError(null);
+    setValue('avatar_url', '', { shouldDirty: true });
+    setRemoveAvatar(true);
+  };
 
   const onSubmit = async (data: PersonFormData) => {
     setServerError(null);
-    const payload = toCreateInput(data);
     try {
+      let avatarUrl: string | null = data.avatar_url || null;
+      const previousAvatarUrl = initial?.avatar_url ?? null;
+
+      if (avatarFile) {
+        avatarUrl = await uploadAvatarFile(avatarFile, initial?.id);
+      } else if (removeAvatar) {
+        avatarUrl = null;
+      }
+
+      const payload = toCreateInput({ ...data, avatar_url: avatarUrl ?? '' });
+
+      let saved: Person;
       if (isEdit && initial) {
-        await updatePerson.mutateAsync({ id: initial.id, input: payload });
+        saved = await updatePerson.mutateAsync({ id: initial.id, input: payload });
+        if (avatarFile && previousAvatarUrl && previousAvatarUrl !== avatarUrl) {
+          await deleteAvatarFile(previousAvatarUrl);
+        } else if (removeAvatar && previousAvatarUrl) {
+          await deleteAvatarFile(previousAvatarUrl);
+        }
         toast.success('Đã cập nhật thành viên');
       } else {
-        await createPerson.mutateAsync(payload);
+        saved = await createPerson.mutateAsync(payload);
+        if (avatarFile && !avatarUrl) {
+          const newUrl = await uploadAvatarFile(avatarFile, saved.id);
+          await updatePerson.mutateAsync({ id: saved.id, input: { avatar_url: newUrl } });
+        }
         toast.success('Đã thêm thành viên mới');
       }
       onSuccess();
@@ -194,7 +295,7 @@ export function PersonForm({ initial, onSuccess }: PersonFormProps) {
     ) : null;
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" noValidate>
       {serverError && (
         <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
           {serverError}
@@ -206,17 +307,19 @@ export function PersonForm({ initial, onSuccess }: PersonFormProps) {
           <CardTitle className="text-base">Thông tin cơ bản</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-1">
             <div>
               <label className="text-sm font-medium">Tên hiển thị *</label>
-              <Input placeholder="Nguyễn Đình Tài" {...register('display_name')} />
+              <Input
+                placeholder="Nguyễn Đình Tài"
+                {...register('display_name', {
+                  onBlur: handleDisplayNameBlur,
+                })}
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Nhập tên rồi bấm ra ngoài để tự tách Họ / Tên đệm / Tên.
+              </p>
               {fieldError('display_name')}
-            </div>
-            <div>
-              <label className="text-sm font-medium">Handle *</label>
-              <Input placeholder="nguyen-dinh-tai" {...register('handle')} />
-              <p className="mt-1 text-xs text-muted-foreground">URL-friendly, không dấu. Để trống sẽ tự tạo.</p>
-              {fieldError('handle')}
             </div>
           </div>
 
@@ -427,9 +530,43 @@ export function PersonForm({ initial, onSuccess }: PersonFormProps) {
             <Textarea rows={3} placeholder="Ghi chú thêm..." {...register('notes')} />
           </div>
           <div>
-            <label className="text-sm font-medium">URL Ảnh đại diện</label>
-            <Input placeholder="https://example.com/avatar.jpg" {...register('avatar_url')} />
-            {fieldError('avatar_url')}
+            <label className="text-sm font-medium">Ảnh đại diện</label>
+            <div className="flex items-start gap-4">
+              {avatarPreview ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={avatarPreview}
+                  alt="Ảnh đại diện"
+                  className="h-24 w-24 rounded-full border object-cover"
+                />
+              ) : (
+                <div className="flex h-24 w-24 items-center justify-center rounded-full border border-dashed text-xs text-muted-foreground">
+                  Chưa có ảnh
+                </div>
+              )}
+              <div className="flex-1 space-y-2">
+                <Input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  onChange={handleAvatarChange}
+                />
+                <p className="text-xs text-muted-foreground">
+                  JPG, PNG, WebP, GIF. Tối đa {MAX_AVATAR_BYTES / 1024 / 1024}MB.
+                </p>
+                {avatarError && <p className="text-xs text-destructive">{avatarError}</p>}
+                {avatarPreview && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleRemoveAvatar}
+                    className="text-destructive"
+                  >
+                    <X className="mr-1 h-3 w-3" /> Xoá ảnh
+                  </Button>
+                )}
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>

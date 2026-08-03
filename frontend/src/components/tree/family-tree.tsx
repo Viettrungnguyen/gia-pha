@@ -488,26 +488,24 @@ function buildTreeLayout(
     people.forEach((person) => visible.add(person.id));
     const hidden = new Set<string>();
 
-    const hideDescendants = (personId: string, hideSpouses = false) => {
+    const hideBranch = (personId: string) => {
       if (hidden.has(personId)) return;
       hidden.add(personId);
 
-      if (hideSpouses) {
-        for (const family of anchorToFamilies.get(personId) ?? []) {
-          const spouseId = familySpouses.get(family.id);
-          if (spouseId) visible.delete(spouseId);
-        }
-      }
-
       for (const family of anchorToFamilies.get(personId) ?? []) {
+        const spouseId = familySpouses.get(family.id);
+        if (spouseId) {
+          hidden.add(spouseId);
+          visible.delete(spouseId);
+        }
         for (const child of childrenByFamily.get(family.id) ?? []) {
           visible.delete(child.person_id);
-          hideDescendants(child.person_id, true);
+          hideBranch(child.person_id);
         }
       }
     };
 
-    collapsedNodes.forEach((personId) => hideDescendants(personId));
+    collapsedNodes.forEach((personId) => hideBranch(personId));
 
     return visible;
   };
