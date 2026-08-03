@@ -173,7 +173,7 @@ git push -u origin main
 | Framework Preset | Next.js (auto) |
 | **Root Directory** | **`frontend`** ⚠️ **Bắt buộc** |
 | Build Command | `pnpm build` (mặc định) |
-| Install Command | `pnpm install` (mặc định) |
+| Install Command | `c` (mặc định) |
 | Output Directory | `.next` (mặc định) |
 
 4. **Environment Variables** — thêm 3 biến:
@@ -286,15 +286,26 @@ WHERE user_id = (SELECT id FROM auth.users WHERE email = 'admin@nguyen-dinh.loca
 
 ### 11.6 Build chậm / OOM trên Free tier
 
-**Cách xử lý:** Tạo `frontend/vercel.json`:
+**Nguyên nhân:** Vercel build ở Free tier chỉ có 1024 MB. Next.js 16 + React 19
++ Tailwind 4 thường đủ, nhưng repo lớn thì có thể tràn RAM.
+
+**Cách xử lý (khuyến nghị):** Nâng cấp Vercel Plan lên **Pro** (8192 MB). Không
+cần đổi code.
+
+**Cách xử lý thay thế (không cần Pro):** Tăng tốc độ build bằng các biện pháp
+an toàn trong `frontend/package.json`:
 
 ```json
 {
-  "build": { "memory": 2048 }
+  "scripts": {
+    "build": "next build --experimental-build-mode=compile"
+  }
 }
 ```
 
-Commit + push → Vercel tự rebuild.
+> **Lưu ý quan trọng:** Vercel từ chối field `build.memory` trong `vercel.json`
+> (`Invalid request: build should NOT have additional property memory`). Không
+> thêm key này — Vercel không đọc nó và build sẽ fail.
 
 ### 11.7 Site URL redirect sai domain
 
