@@ -1,0 +1,67 @@
+---
+project: NguyenDinhHoaNgai
+path: .sdlc-config.json
+type: sdlc-config
+version: 1.0.0
+updated: 2026-07-23
+owner: "@dev-team"
+status: draft
+---
+
+# MTS-SDLC Framework Configuration
+# Tier: LITE (5 stages) - phù hợp dự án web gia phả đơn lẻ, 1-3 tháng triển khai
+
+{
+  "$schema": "https://mts-sdlc.dev/schemas/config.json",
+  "version": "6.1.0",
+  "tier": "LITE",
+  "project": {
+    "name": "NguyenDinhHoaNgai",
+    "displayName": "Gia phả điện tử - Dòng họ Nguyễn Đình làng Hòa Ngãi",
+    "description": "Website gia phả điện tử công khai cho dòng họ Nguyễn Đình, làng Hòa Ngãi, xã Thanh Hà, huyện Thanh Liêm, tỉnh Hà Nam",
+    "repository": "https://github.com/Minh-Tam-Solution/NguyenDinhHoaNgai",
+    "supabaseProject": "giapha-nguyen-dinh-hoa-ngai",
+    "vercelProject": "giapha-nguyen-dinh-hoa-ngai"
+  },
+  "stages": [
+    "00-foundation",
+    "01-planning",
+    "02-design",
+    "04-build",
+    "05-test"
+  ],
+  "conventions": {
+    "commitPrefix": true,
+    "branchNaming": "feature|fix|docs|chore/description",
+    "prTemplate": true,
+    "requireFileHeader": true,
+    "requireYAMLFrontmatter": true
+  },
+  "scope": {
+    "tinh_nang": [
+      "Cây gia phả trực quan (public)",
+      "Danh sách và chi tiết thành viên (public)",
+      "Danh bạ liên lạc với kiểm soát quyền riêng tư",
+      "Thống kê gia phả theo đời, chi, giới tính và trạng thái",
+      "Lịch cúng lễ - giỗ - họp họ (public)",
+      "Kho tài liệu PDF, ảnh, văn bản (public)",
+      "Đăng nhập admin qua Supabase Auth",
+      "CRUD thành viên và quan hệ gia phả (admin)",
+      "CRUD lịch cúng lễ (admin)",
+      "CRUD kho tài liệu và upload file (admin)"
+    ],
+    "ngoai_pham_vi": [
+      "Đăng ký thành viên công khai",
+      "Phân quyền editor/viewer/guest",
+      "Xác minh tài khoản bằng admin",
+      "MFA/TOTP",
+      "Desktop app (Electron)",
+      "Docker container",
+      "GEDCOM import/export",
+      "Feed cộng đồng, notifications",
+      "Quỹ khuyến học, học bổng",
+      "Cầu đương, hương ước",
+      "Tìm quan hệ nâng cao"
+    ]
+  }
+}
