@@ -58,6 +58,27 @@ export function PersonDetail({ person, families, children, allPeople }: Props) {
     .map((c) => peopleById.get(c.person_id))
     .filter((p): p is Person => Boolean(p));
 
+  const daughtersAndSonsInLaw = ownChildren.flatMap((child) => {
+    const childFamilies = families.filter(
+      (f) => f.father_id === child.id || f.mother_id === child.id
+    );
+    return childFamilies
+      .flatMap((f) => {
+        if (f.father_id === child.id && f.mother_id) {
+          const spouse = peopleById.get(f.mother_id);
+          return spouse ? [{ spouse, of: child }] : [];
+        }
+        if (f.mother_id === child.id && f.father_id) {
+          const spouse = peopleById.get(f.father_id);
+          return spouse ? [{ spouse, of: child }] : [];
+        }
+        return [];
+      })
+      .filter(
+        (item, index, arr) => arr.findIndex((x) => x.spouse.id === item.spouse.id) === index
+      );
+  });
+
   const Field = ({ label, value }: { label: string; value?: string | null }) => {
     if (!value) return null;
     return (
@@ -170,7 +191,33 @@ export function PersonDetail({ person, families, children, allPeople }: Props) {
             </div>
           )}
 
-          {parents.length === 0 && spouses.length === 0 && ownChildren.length === 0 && siblings.length === 0 && (
+          {daughtersAndSonsInLaw.length > 0 && (
+            <div className="mt-4">
+              <h3 className="mb-2 text-sm font-medium text-muted-foreground">
+                Con dâu / Con rể ({daughtersAndSonsInLaw.length})
+              </h3>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {daughtersAndSonsInLaw.map(({ spouse, of }) => {
+                  const label = of.gender === 1 ? 'Con dâu' : 'Con rể';
+                  return (
+                    <Link
+                      key={`${spouse.id}-${of.id}`}
+                      href={`/thanh-vien/${spouse.id}`}
+                      className="block rounded-md border px-3 py-2 text-sm transition-colors hover:bg-muted"
+                    >
+                      <div className="font-medium">{spouse.display_name}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {label} của {of.display_name} · Đời {spouse.generation}
+                        {!spouse.is_living && ' †'}
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {parents.length === 0 && spouses.length === 0 && ownChildren.length === 0 && daughtersAndSonsInLaw.length === 0 && siblings.length === 0 && (
             <p className="text-sm text-muted-foreground">Chưa có thông tin quan hệ.</p>
           )}
         </section>

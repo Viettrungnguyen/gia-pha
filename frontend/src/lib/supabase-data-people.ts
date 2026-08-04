@@ -102,16 +102,13 @@ export async function getPerson(id: string): Promise<Person | null> {
 
 export async function searchPeople(query: string, limit = 20): Promise<Person[]> {
   const supabase = getSupabaseBrowserClient();
-  const escaped = query.replace(/[%_\\]/g, '\\$&');
-  const { data, error } = await supabase
-    .from('people')
-    .select('*')
-    .ilike('display_name', `%${escaped}%`)
-    .order('display_name')
-    .limit(limit);
+  const { data, error } = await supabase.rpc('search_people_with_father', {
+    query_text: query,
+    max_results: limit,
+  });
 
   if (error) throw error;
-  return data ?? [];
+  return (data ?? []) as unknown as Person[];
 }
 
 export type CreatePersonInput = Omit<

@@ -573,10 +573,62 @@ export function createLocalSupabase() {
 
   const from = (table: string) => new LocalFromTable(table);
 
+  const rpcHandlers: Record<string, (params: Record<string, unknown>) => Row[]> = {
+    search_people_with_father: ({ query_text, max_results }) => {
+      const needle = String(query_text ?? '').toLowerCase();
+      const limit = Math.max(Number(max_results) || 20, 1);
+      const store = getStore();
+      const peopleRows = store.rowsFor('people');
+      const childRows = store.rowsFor('children');
+      const familyRows = store.rowsFor('families');
+      const matches: Row[] = [];
+      for (const p of peopleRows) {
+        if (!String(p.display_name ?? '').toLowerCase().includes(needle)) continue;
+        const row: Row = { ...p, father_name: null };
+        const childRow = childRows.find((c) => c.person_id === p.id);
+        if (childRow) {
+          const family = familyRows.find((f) => f.id === childRow.family_id);
+          if (family?.father_id) {
+            const father = peopleRows.find((pp) => pp.id === family.father_id);
+            row.father_name = father?.display_name ?? null;
+          }
+        }
+        matches.push(row);
+      }
+      matches.sort((a, b) => {
+        const ga = Number(a.generation) || 0;
+        const gb = Number(b.generation) || 0;
+        if (ga !== gb) return ga - gb;
+        const ya = a.birth_year == null ? Number.MAX_SAFE_INTEGER : Number(a.birth_year);
+        const yb = b.birth_year == null ? Number.MAX_SAFE_INTEGER : Number(b.birth_year);
+        if (ya !== yb) return ya - yb;
+        return String(a.display_name ?? '').localeCompare(String(b.display_name ?? ''));
+      });
+      return matches.slice(0, limit);
+    },
+  };
+
+  const rpc = async (fn: string, params: Record<string, unknown> = {}) => {
+    const handler = rpcHandlers[fn];
+    if (!handler) {
+      return { data: null, error: { message: `RPC chưa được hỗ trợ ở local mode: ${fn}` } };
+    }
+    try {
+      const data = handler(params);
+      return { data, error: null };
+    } catch (err) {
+      return {
+        data: null,
+        error: { message: err instanceof Error ? err.message : 'Lỗi local RPC' },
+      };
+    }
+  };
+
   return {
     auth,
     storage,
     from,
+    rpc,
     __local: true,
     fireAuthEvent: fire,
     __session: () => clone(session),

@@ -8,7 +8,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -18,7 +18,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useCreatePerson, useUpdatePerson } from '@/hooks/use-people';
-import { useEnsureFamilyAndAddChild } from '@/hooks/use-families';
+import { useEnsureFamilyAndAddChild, useTreeData } from '@/hooks/use-families';
 import { ParentCombobox } from '@/components/people/parent-combobox';
 import {
   uploadAvatarFile,
@@ -174,6 +174,7 @@ export function PersonForm({ initial, onSuccess }: PersonFormProps) {
   const createPerson = useCreatePerson();
   const updatePerson = useUpdatePerson();
   const ensureFamilyAndAddChild = useEnsureFamilyAndAddChild();
+  const { data: treeData } = useTreeData();
   const [serverError, setServerError] = useState<string | null>(null);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(
@@ -185,6 +186,67 @@ export function PersonForm({ initial, onSuccess }: PersonFormProps) {
   const [fatherName, setFatherName] = useState<string>('');
   const [motherId, setMotherId] = useState<string>('');
   const [motherName, setMotherName] = useState<string>('');
+
+  const resolveUniqueSpouse = (
+    selectedId: string,
+    role: 'father' | 'mother'
+  ): { id: string; name: string } | null => {
+    if (!treeData || !selectedId) return null;
+    const families = treeData.families.filter((family) =>
+      role === 'father' ? family.father_id === selectedId : family.mother_id === selectedId
+    );
+    if (families.length !== 1) return null;
+    const spouseId =
+      role === 'father' ? families[0].mother_id : families[0].father_id;
+    if (!spouseId) return null;
+    const spouse = treeData.people.find((person) => person.id === spouseId);
+    if (!spouse) return null;
+    return { id: spouse.id, name: spouse.display_name };
+  };
+
+  const handleFatherSelect = (id: string, name: string) => {
+    setFatherId(id);
+    setFatherName(name);
+    if (motherId) return;
+    const spouse = resolveUniqueSpouse(id, 'father');
+    if (spouse) {
+      setMotherId(spouse.id);
+      setMotherName(spouse.name);
+    }
+  };
+
+  const handleMotherSelect = (id: string, name: string) => {
+    setMotherId(id);
+    setMotherName(name);
+    if (fatherId) return;
+    const spouse = resolveUniqueSpouse(id, 'mother');
+    if (spouse) {
+      setFatherId(spouse.id);
+      setFatherName(spouse.name);
+    }
+  };
+
+  useEffect(() => {
+    if (!initial || !treeData) return;
+    const childRow = treeData.children.find((c) => c.person_id === initial.id);
+    if (!childRow) return;
+    const family = treeData.families.find((f) => f.id === childRow.family_id);
+    if (!family) return;
+    const father = family.father_id
+      ? treeData.people.find((p) => p.id === family.father_id)
+      : null;
+    const mother = family.mother_id
+      ? treeData.people.find((p) => p.id === family.mother_id)
+      : null;
+    if (father) {
+      setFatherId(father.id);
+      setFatherName(father.display_name);
+    }
+    if (mother) {
+      setMotherId(mother.id);
+      setMotherName(mother.display_name);
+    }
+  }, [initial?.id, treeData]);
 
   const {
     register,
@@ -469,10 +531,7 @@ export function PersonForm({ initial, onSuccess }: PersonFormProps) {
               <ParentCombobox
                 selectedId={fatherId || undefined}
                 selectedName={fatherName}
-                onSelect={(id, name) => {
-                  setFatherId(id);
-                  setFatherName(name);
-                }}
+                onSelect={handleFatherSelect}
                 placeholder="Tìm cha..."
               />
             </div>
@@ -481,10 +540,7 @@ export function PersonForm({ initial, onSuccess }: PersonFormProps) {
               <ParentCombobox
                 selectedId={motherId || undefined}
                 selectedName={motherName}
-                onSelect={(id, name) => {
-                  setMotherId(id);
-                  setMotherName(name);
-                }}
+                onSelect={handleMotherSelect}
                 placeholder="Tìm mẹ..."
               />
             </div>

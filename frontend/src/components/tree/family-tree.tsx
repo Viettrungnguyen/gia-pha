@@ -1,9 +1,9 @@
 /**
  * @project NguyenDinhHoaNgai
  * @file src/components/tree/family-tree.tsx
- * @description Interactive hierarchical family tree with zoom, pan, filters, collapse and minimap
- * @version 2.0.0
- * @updated 2026-07-24
+ * @description Interactive hierarchical family tree with zoom, pan, filters, collapse, focus branch and minimap
+ * @version 2.1.3
+ * @updated 2026-08-05
  */
 
 'use client';
@@ -15,6 +15,7 @@ import {
   ArrowUpFromLine,
   ChevronDown,
   ChevronRight,
+  Crosshair,
   GitBranch,
   Maximize2,
   Move,
@@ -793,6 +794,11 @@ export function FamilyTree({ people, families, children }: Props) {
     typeof window !== 'undefined' && window.innerWidth < 768 ? 0.7 : 1
   );
   const [pan, setPan] = useState({ x: 0, y: 0 });
+  const targetScaleRef = useRef(scale);
+  const targetPanRef = useRef(pan);
+  const currentScaleRef = useRef(scale);
+  const currentPanRef = useRef(pan);
+  const animFrameRef = useRef<number | null>(null);
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
@@ -809,6 +815,7 @@ export function FamilyTree({ people, families, children }: Props) {
   const [containerSize, setContainerSize] = useState({ width: 800, height: 600 });
   const containerRef = useRef<HTMLDivElement>(null);
   const autoCollapseApplied = useRef(false);
+  const pendingFocusPanRef = useRef(false);
 
   const data = useMemo(() => ({ people, families, children }), [people, families, children]);
   const selectedPerson = selectedPersonId
@@ -871,12 +878,34 @@ export function FamilyTree({ people, families, children }: Props) {
     [collapsedNodes, data, filterRootPerson?.id, selectedPerson?.id, viewMode]
   );
 
+  useEffect(() => {
+    if (!pendingFocusPanRef.current) return;
+    if (!selectedPerson) return;
+
+    const targetNode = layout.nodes.find((node) => node.person.id === selectedPerson.id);
+    if (!targetNode) return;
+
+    const nodeCenterX = targetNode.x + layout.offsetX + NODE_WIDTH / 2;
+    const nodeCenterY = targetNode.y + NODE_HEIGHT / 2;
+
+    const nextPan = {
+      x: containerSize.width / 2 - nodeCenterX * scale,
+      y: containerSize.height / 2 - nodeCenterY * scale,
+    };
+
+    setPan(nextPan);
+    targetPanRef.current = nextPan;
+    currentPanRef.current = nextPan;
+    pendingFocusPanRef.current = false;
+  }, [containerSize.height, containerSize.width, layout, scale, selectedPerson]);
+
   const handleSetFilterRoot = useCallback((person: Person | null) => {
     setFilterRootId(person?.id ?? null);
     setSelectedPersonId(person?.id ?? null);
     setFilterSearch('');
     setFilterDropdownOpen(false);
     setPan({ x: 0, y: 0 });
+    targetPanRef.current = { x: 0, y: 0 };
 
     const params = new URLSearchParams(window.location.search);
     if (person) params.set('root', person.id);
@@ -892,6 +921,7 @@ export function FamilyTree({ people, families, children }: Props) {
   const handleViewModeChange = (mode: ViewMode) => {
     setViewMode(mode);
     setPan({ x: 0, y: 0 });
+    targetPanRef.current = { x: 0, y: 0 };
     if (mode !== 'all' && !selectedPersonId && people.length > 0) {
       setSelectedPersonId(filterRootPerson?.id ?? people[0].id);
     }
@@ -925,6 +955,81 @@ export function FamilyTree({ people, families, children }: Props) {
     );
   }, [children, families, people]);
 
+  const handleFocusBranch = useCallback(
+    (personId: string) => {
+      const anchorsWithChildren = new Set<string>();
+      for (const family of families) {
+        const hasChildren = children.some((child) => child.family_id === family.id);
+        if (!hasChildren) continue;
+        if (family.father_id) anchorsWithChildren.add(family.father_id);
+        if (family.mother_id) anchorsWithChildren.add(family.mother_id);
+      }
+
+      const familyById = new Map(families.map((family) => [family.id, family]));
+      const childToFamily = new Map<string, (typeof families)[number]>();
+      const childrenByFamily = new Map<string, Child[]>();
+
+      for (const child of children) {
+        const list = childrenByFamily.get(child.family_id) ?? [];
+        list.push(child);
+        childrenByFamily.set(child.family_id, list);
+
+        if (!childToFamily.has(child.person_id)) {
+          const family = familyById.get(child.family_id);
+          if (family) childToFamily.set(child.person_id, family);
+        }
+      }
+
+      const focusIds = new Set<string>();
+
+      const addAncestors = (id: string) => {
+        if (focusIds.has(id)) return;
+        focusIds.add(id);
+        const family = childToFamily.get(id);
+        if (family?.father_id) addAncestors(family.father_id);
+        if (family?.mother_id) addAncestors(family.mother_id);
+      };
+
+      const addDescendants = (id: string) => {
+        if (focusIds.has(id)) return;
+        focusIds.add(id);
+
+        const spouseIds = new Set<string>();
+        for (const family of families) {
+          if (family.father_id === id && family.mother_id) {
+            spouseIds.add(family.mother_id);
+          }
+          if (family.mother_id === id && family.father_id) {
+            spouseIds.add(family.father_id);
+          }
+        }
+        spouseIds.forEach((spouseId) => {
+          if (!focusIds.has(spouseId)) focusIds.add(spouseId);
+        });
+
+        for (const family of families) {
+          if (family.father_id !== id && family.mother_id !== id) continue;
+          for (const child of childrenByFamily.get(family.id) ?? []) {
+            addDescendants(child.person_id);
+          }
+        }
+      };
+
+      addAncestors(personId);
+      addDescendants(personId);
+
+      const collapsed = new Set<string>();
+      for (const person of people) {
+        if (!anchorsWithChildren.has(person.id)) continue;
+        if (!focusIds.has(person.id)) collapsed.add(person.id);
+      }
+
+      setCollapsedNodes(collapsed);
+      pendingFocusPanRef.current = true;
+    },
+    [children, families, people]
+  );
+
   const handleMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
     setIsPanning(true);
@@ -933,7 +1038,10 @@ export function FamilyTree({ people, families, children }: Props) {
 
   const handleMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {
     if (!isPanning) return;
-    setPan({ x: event.clientX - panStart.x, y: event.clientY - panStart.y });
+    const next = { x: event.clientX - panStart.x, y: event.clientY - panStart.y };
+    setPan(next);
+    targetPanRef.current = next;
+    currentPanRef.current = next;
   };
 
   const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
@@ -947,22 +1055,93 @@ export function FamilyTree({ people, families, children }: Props) {
 
   const handleTouchMove = (event: React.TouchEvent<HTMLDivElement>) => {
     if (!isPanning || event.touches.length !== 1) return;
-    setPan({
+    const next = {
       x: event.touches[0].clientX - panStart.x,
       y: event.touches[0].clientY - panStart.y,
-    });
-  };
-
-  const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    const delta = event.deltaY > 0 ? -0.05 : 0.05;
-    setScale((current) => Math.max(0.3, Math.min(2, current + delta)));
+    };
+    setPan(next);
+    targetPanRef.current = next;
+    currentPanRef.current = next;
   };
 
   const handleReset = () => {
-    setScale(window.innerWidth < 768 ? 0.7 : 1);
+    const next = window.innerWidth < 768 ? 0.7 : 1;
+    setScale(next);
     setPan({ x: 0, y: 0 });
+    targetScaleRef.current = next;
+    targetPanRef.current = { x: 0, y: 0 };
+    currentScaleRef.current = next;
+    currentPanRef.current = { x: 0, y: 0 };
   };
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    targetScaleRef.current = scale;
+    targetPanRef.current = pan;
+
+    const tick = () => {
+      const ts = targetScaleRef.current;
+      const tp = targetPanRef.current;
+      const cs = currentScaleRef.current;
+      const cp = currentPanRef.current;
+      const newScale = cs + (ts - cs) * 0.18;
+      const newPan = {
+        x: cp.x + (tp.x - cp.x) * 0.18,
+        y: cp.y + (tp.y - cp.y) * 0.18,
+      };
+      currentScaleRef.current = newScale;
+      currentPanRef.current = newPan;
+      targetScaleRef.current = newScale;
+      targetPanRef.current = newPan;
+      setScale(newScale);
+      setPan(newPan);
+
+      const sDelta = Math.abs(ts - newScale);
+      const pDelta = Math.abs(tp.x - newPan.x) + Math.abs(tp.y - newPan.y);
+
+      if (sDelta > 0.0005 || pDelta > 0.05) {
+        animFrameRef.current = requestAnimationFrame(tick);
+      } else {
+        animFrameRef.current = null;
+      }
+    };
+
+    const start = () => {
+      if (animFrameRef.current === null) {
+        animFrameRef.current = requestAnimationFrame(tick);
+      }
+    };
+
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      start();
+
+      const rect = container.getBoundingClientRect();
+      const cursorX = event.clientX - rect.left;
+      const cursorY = event.clientY - rect.top;
+
+      const normalizedDelta =
+        event.deltaMode === 1 ? event.deltaY * 16 : event.deltaMode === 2 ? event.deltaY * 100 : event.deltaY;
+      const factor = Math.exp(-normalizedDelta * 0.0025);
+      const currentScale = targetScaleRef.current;
+      const nextScale = Math.max(0.3, Math.min(2, currentScale * factor));
+      if (nextScale === currentScale) return;
+
+      targetScaleRef.current = nextScale;
+      targetPanRef.current = {
+        x: cursorX - ((cursorX - targetPanRef.current.x) / currentScale) * nextScale,
+        y: cursorY - ((cursorY - targetPanRef.current.y) / currentScale) * nextScale,
+      };
+    };
+
+    container.addEventListener('wheel', onWheel, { passive: false });
+    return () => {
+      container.removeEventListener('wheel', onWheel);
+      if (animFrameRef.current !== null) cancelAnimationFrame(animFrameRef.current);
+    };
+  }, []);
 
   const viewport = {
     x: -pan.x / scale,
@@ -1182,7 +1361,6 @@ export function FamilyTree({ people, families, children }: Props) {
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={() => setIsPanning(false)}
-        onWheel={handleWheel}
       >
         <svg width="100%" height="100%" aria-label="Cây gia phả dòng họ Nguyễn Đình">
           <g transform={`translate(${pan.x}, ${pan.y}) scale(${scale})`}>
@@ -1246,6 +1424,14 @@ export function FamilyTree({ people, families, children }: Props) {
             <div className="flex flex-wrap items-center gap-2">
               {viewMode === 'all' && (
                 <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleFocusBranch(selectedPerson.id)}
+                  >
+                    <Crosshair className="h-4 w-4" />
+                    <span className="hidden sm:inline">Focus nhánh</span>
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"

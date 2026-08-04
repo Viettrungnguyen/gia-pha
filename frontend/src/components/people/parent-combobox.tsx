@@ -2,8 +2,8 @@
  * @project NguyenDinhHoaNgai
  * @file src/components/people/parent-combobox.tsx
  * @description Parent picker combobox
- * @version 1.1.0
- * @updated 2026-07-24
+ * @version 1.2.0
+ * @updated 2026-08-04
  */
 
 'use client';
@@ -76,6 +76,7 @@ export function ParentCombobox({
                 Đời {p.generation}
                 {p.birth_year ? ` · ${p.birth_year}` : ''}
                 {!p.is_living ? ' †' : ''}
+                {p.father_name ? ` · con ${p.father_name}` : ''}
               </div>
             </button>
           ))}

@@ -39,6 +39,8 @@ export interface Person {
   privacy_level: 0 | 1 | 2;
   created_at: string;
   updated_at: string;
+  /** Denormalized father display_name, populated by search RPC. Optional. */
+  father_name?: string | null;
 }
 
 export interface Family {
