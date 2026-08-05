@@ -48,12 +48,41 @@ interface Props {
 
 const NODE_WIDTH = 160;
 const NODE_HEIGHT = 96;
-const LEVEL_HEIGHT = 175;
+const EARLY_GEN_NODE_WIDTH = 210;
+const EARLY_GEN_NODE_HEIGHT = 100;
+const ROOT_GEN_NODE_WIDTH = 240;
+const ROOT_GEN_BODY_HEIGHT = 92;
+const ROOT_GEN_ARCH_HEIGHT = 24;
+const LEVEL_HEIGHT = 150;
 const SIBLING_GAP = 20;
 const BRANCH_GAP = 60;
 const COUPLE_GAP = 16;
 const MINIMAP_WIDTH = 160;
 const MINIMAP_HEIGHT = 100;
+
+function getNodeWidth(person: { generation: number | null }): number {
+  const gen = person.generation ?? 1;
+  if (gen === 1) return ROOT_GEN_NODE_WIDTH;
+  if (gen === 2) return EARLY_GEN_NODE_WIDTH;
+  return NODE_WIDTH;
+}
+
+function getNodeHeight(person: { generation: number | null }): number {
+  const gen = person.generation ?? 1;
+  if (gen === 1) return ROOT_GEN_BODY_HEIGHT + ROOT_GEN_ARCH_HEIGHT;
+  if (gen === 2) return EARLY_GEN_NODE_HEIGHT;
+  return NODE_HEIGHT;
+}
+
+// Y of the center of the rectangular body (used to anchor couple/child lines
+// so they connect to the box, not to the arch).
+function getNodeBodyCenterOffset(person: { generation: number | null }): number {
+  const gen = person.generation ?? 1;
+  if (gen === 1) {
+    return ROOT_GEN_ARCH_HEIGHT + ROOT_GEN_BODY_HEIGHT / 2;
+  }
+  return getNodeHeight(person) / 2;
+}
 
 type ViewMode = 'all' | 'ancestors' | 'descendants';
 
@@ -61,6 +90,8 @@ interface TreeNodeData {
   person: Person;
   x: number;
   y: number;
+  width: number;
+  height: number;
   isCollapsed: boolean;
   hasChildren: boolean;
   isSpouse: boolean;
@@ -113,21 +144,27 @@ function wrapName(name: string, charsPerLine = 18): [string, string | null] {
 }
 
 function TreeNode({ node, isSelected, onSelect, onToggleCollapse }: TreeNodeProps) {
-  const { person, x, y, isCollapsed, hasChildren, isSpouse } = node;
+  const { person, x, y, width, height, isCollapsed, hasChildren, isSpouse } = node;
   const isMale = person.gender === 1;
-  const isEarlyGeneration = person.generation === 1 || person.generation === 2;
+  const isRootGeneration = person.generation === 1;
+  const isAncestorGeneration = person.generation === 2;
+  const isEarlyGeneration = isRootGeneration || isAncestorGeneration;
   const isDaughterInLaw = isSpouse && !isMale;
 
-  const nodeBackground = isEarlyGeneration
+  const nodeBackground = isRootGeneration
     ? isMale ? '#fef3c7' : '#fff7ed'
-    : isDaughterInLaw ? '#faf5ff'
-    : isMale ? '#eff6ff' : '#fff1f2';
+    : isAncestorGeneration
+      ? isMale ? '#fef3c7' : '#fff7ed'
+      : isDaughterInLaw ? '#faf5ff'
+        : isMale ? '#eff6ff' : '#fff1f2';
   const nodeBorder = isSelected
     ? '#9a3412'
-    : isEarlyGeneration
-      ? isMale ? '#d97706' : '#ea580c'
-      : isDaughterInLaw ? '#a855f7'
-      : isMale ? '#60a5fa' : '#f472b6';
+    : isRootGeneration
+      ? isMale ? '#b45309' : '#9a3412'
+      : isAncestorGeneration
+        ? isMale ? '#d97706' : '#ea580c'
+        : isDaughterInLaw ? '#a855f7'
+          : isMale ? '#60a5fa' : '#f472b6';
   const avatarBackground = isEarlyGeneration
     ? isMale ? '#fde68a' : '#fed7aa'
     : isDaughterInLaw ? '#e9d5ff'
@@ -136,8 +173,7 @@ function TreeNode({ node, isSelected, onSelect, onToggleCollapse }: TreeNodeProp
   const words = person.display_name.trim().split(/\s+/);
   const initial = (words.at(-1)?.charAt(0) || '?').toUpperCase();
   const [line1, line2] = wrapName(person.display_name);
-  const centerX = x + NODE_WIDTH / 2;
-  const nameLine1Y = line2 ? y + 50 : y + 57;
+  const centerX = x + width / 2;
   const meta = [
     `Đời ${person.generation}`,
     person.birth_year ? String(person.birth_year) : null,
@@ -153,13 +189,194 @@ function TreeNode({ node, isSelected, onSelect, onToggleCollapse }: TreeNodeProp
     }
   };
 
-  const isRootGeneration = person.generation === 1;
-  const isAncestorGeneration = person.generation === 2;
   const generationBadge = isRootGeneration
     ? '🌟'
     : isAncestorGeneration
       ? '✨'
       : null;
+
+  // Đời 1: hình chữ nhật lớn + mái vòm + ngôi sao trang trí
+  if (isRootGeneration) {
+    const archH = ROOT_GEN_ARCH_HEIGHT;
+    const bodyH = ROOT_GEN_BODY_HEIGHT;
+    const archTopY = y;
+    const bodyTopY = archTopY + archH;
+    const bodyBottomY = bodyTopY + bodyH;
+
+    // Path vòm: từ đáy thân hộp đi lên cong thành vòm rồi xuống đáy bên kia
+    const archPath = `M ${x} ${bodyTopY} Q ${x} ${archTopY} ${x + width / 2} ${archTopY} Q ${x + width} ${archTopY} ${x + width} ${bodyTopY} Z`;
+
+    const avatarR = 14;
+    const avatarCx = x + 30;
+    const avatarCy = bodyTopY + 28;
+    const nameX = x + 60;
+    const nameLine1Y = bodyTopY + 28;
+    const nameLine2Y = bodyTopY + 44;
+    const treeLabelY = bodyTopY + 58;
+    const metaY = bodyBottomY - 12;
+    const starY = archTopY + archH * 0.55;
+
+    return (
+      <g
+        role="button"
+        tabIndex={0}
+        aria-label={`Xem ${person.display_name}`}
+        className="outline-none"
+        style={{ cursor: 'pointer' }}
+        onClick={() => onSelect(person)}
+        onKeyDown={handleKeyDown}
+      >
+        {/* Thân hộp (hình chữ nhật) */}
+        <rect
+          x={x}
+          y={bodyTopY}
+          width={width}
+          height={bodyH}
+          fill={nodeBackground}
+          stroke={nodeBorder}
+          strokeWidth={isSelected ? 2.5 : 2.5}
+        />
+
+        {/* Mái vòm (arch) */}
+        <path
+          d={archPath}
+          fill={nodeBackground}
+          stroke={nodeBorder}
+          strokeWidth={isSelected ? 2.5 : 2.5}
+          strokeLinejoin="round"
+        />
+
+        {/* Ngôi sao trang trí trong vòm */}
+        <Star cx={centerX} cy={starY} r={9} fill={isMale ? '#fef3c7' : '#fff7ed'} stroke={nodeBorder} strokeWidth={1.2} />
+
+        {/* Avatar tròn (góc trái thân hộp) */}
+        <circle cx={avatarCx} cy={avatarCy} r={avatarR} fill={avatarBackground} stroke={nodeBorder} strokeWidth={1} />
+        <text
+          x={avatarCx}
+          y={avatarCy + 6}
+          textAnchor="middle"
+          fontSize={15}
+          fontWeight={700}
+          fill="#1f2937"
+          style={{ userSelect: 'none' }}
+        >
+          {initial}
+        </text>
+
+        {/* Tên – canh trái, bên phải avatar */}
+        <text
+          x={nameX}
+          y={nameLine1Y}
+          textAnchor="start"
+          fontSize={15}
+          fontWeight={700}
+          fill="#78350f"
+          style={{ userSelect: 'none' }}
+        >
+          {line1}
+        </text>
+        {line2 && (
+          <text
+            x={nameX}
+            y={nameLine2Y}
+            textAnchor="start"
+            fontSize={15}
+            fontWeight={700}
+            fill="#78350f"
+            style={{ userSelect: 'none' }}
+          >
+            {line2}
+          </text>
+        )}
+
+        {person.tree_label && (
+          <text
+            x={nameX}
+            y={treeLabelY}
+            textAnchor="start"
+            fontSize={11}
+            fontWeight={700}
+            fill="#9a3412"
+            fontStyle="italic"
+            style={{ userSelect: 'none' }}
+          >
+            {person.tree_label}
+          </text>
+        )}
+
+        {/* Meta – canh giữa dưới đáy thân */}
+        <text
+          x={centerX}
+          y={metaY}
+          textAnchor="middle"
+          fontSize={10}
+          fill="#92400e"
+          fontWeight={500}
+          style={{ userSelect: 'none' }}
+        >
+          {meta}
+        </text>
+
+        {isSelected && (
+          <path
+            d={`M ${x - 6} ${bodyBottomY + 6} L ${x - 6} ${bodyTopY} Q ${x - 6} ${archTopY - 6} ${x + width / 2} ${archTopY - 6} Q ${x + width + 6} ${archTopY - 6} ${x + width + 6} ${bodyTopY} L ${x + width + 6} ${bodyBottomY + 6} Z`}
+            fill="none"
+            stroke="#9a3412"
+            strokeWidth={1.5}
+            strokeDasharray="5 3"
+            opacity={0.65}
+            pointerEvents="none"
+          />
+        )}
+
+        {hasChildren && (
+          <g
+            role="button"
+            tabIndex={0}
+            aria-label={isCollapsed ? 'Mở rộng nhánh' : 'Thu gọn nhánh'}
+            style={{ cursor: 'pointer' }}
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggleCollapse(person.id);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                event.stopPropagation();
+                onToggleCollapse(person.id);
+              }
+            }}
+          >
+            <circle
+              cx={centerX}
+              cy={bodyBottomY}
+              r={10}
+              fill="#ffffff"
+              stroke={collapseBorder}
+              strokeWidth={1.5}
+            />
+            <text
+              x={centerX}
+              y={bodyBottomY + 5}
+              textAnchor="middle"
+              fontSize={15}
+              fontWeight={700}
+              fill="#6b7280"
+              style={{ userSelect: 'none' }}
+            >
+              {isCollapsed ? '+' : '−'}
+            </text>
+          </g>
+        )}
+      </g>
+    );
+  }
+
+  // Đời 2 trở đi: rect bo góc như cũ
+  const avatarSize = isEarlyGeneration ? 15 : 13;
+  const avatarCy = isEarlyGeneration ? y + 26 : y + 24;
+  const nameCenterY = isEarlyGeneration ? y + 60 : y + 57;
+  const nameLine1Y = line2 ? nameCenterY - 7 : nameCenterY;
 
   return (
     <g
@@ -171,35 +388,21 @@ function TreeNode({ node, isSelected, onSelect, onToggleCollapse }: TreeNodeProp
       onClick={() => onSelect(person)}
       onKeyDown={handleKeyDown}
     >
-      {isEarlyGeneration && (
-        <rect
-          x={x - 2}
-          y={y - 2}
-          width={NODE_WIDTH + 4}
-          height={NODE_HEIGHT + 4}
-          rx={10}
-          fill="none"
-          stroke={isRootGeneration ? '#b45309' : '#c2410c'}
-          strokeWidth={isRootGeneration ? 3 : 2}
-          strokeDasharray={isRootGeneration ? '6 3' : '4 2'}
-          opacity={0.5}
-        />
-      )}
       <rect
         x={x}
         y={y}
-        width={NODE_WIDTH}
-        height={NODE_HEIGHT}
+        width={width}
+        height={height}
         rx={8}
         fill={nodeBackground}
         stroke={nodeBorder}
         strokeWidth={isSelected ? 2.5 : isRootGeneration ? 2.5 : 1.5}
       />
 
-      <circle cx={centerX} cy={y + 24} r={13} fill={avatarBackground} />
+      <circle cx={centerX} cy={avatarCy} r={avatarSize} fill={avatarBackground} />
       {generationBadge && (
         <text
-          x={centerX + 10}
+          x={centerX + 14}
           y={y + 14}
           textAnchor="middle"
           fontSize={10}
@@ -211,9 +414,9 @@ function TreeNode({ node, isSelected, onSelect, onToggleCollapse }: TreeNodeProp
       )}
       <text
         x={centerX}
-        y={y + 29}
+        y={avatarCy + 5}
         textAnchor="middle"
-        fontSize={13}
+        fontSize={isEarlyGeneration ? 15 : 13}
         fontWeight={700}
         fill="#1f2937"
         style={{ userSelect: 'none' }}
@@ -225,7 +428,7 @@ function TreeNode({ node, isSelected, onSelect, onToggleCollapse }: TreeNodeProp
         x={centerX}
         y={nameLine1Y}
         textAnchor="middle"
-        fontSize={isRootGeneration ? 12 : 11}
+        fontSize={isAncestorGeneration ? 13 : 11}
         fontWeight={isEarlyGeneration ? 700 : 600}
         fill={isEarlyGeneration ? '#78350f' : '#1f2937'}
         style={{ userSelect: 'none' }}
@@ -236,9 +439,9 @@ function TreeNode({ node, isSelected, onSelect, onToggleCollapse }: TreeNodeProp
       {line2 && (
         <text
           x={centerX}
-          y={y + 65}
+          y={nameLine1Y + 15}
           textAnchor="middle"
-          fontSize={isRootGeneration ? 12 : 11}
+          fontSize={isAncestorGeneration ? 13 : 11}
           fontWeight={isEarlyGeneration ? 700 : 600}
           fill={isEarlyGeneration ? '#78350f' : '#1f2937'}
           style={{ userSelect: 'none' }}
@@ -250,9 +453,9 @@ function TreeNode({ node, isSelected, onSelect, onToggleCollapse }: TreeNodeProp
       {person.tree_label && (
         <text
           x={centerX}
-          y={line2 ? y + 80 : y + 73}
+          y={line2 ? nameLine1Y + 30 : nameLine1Y + 15}
           textAnchor="middle"
-          fontSize={10}
+          fontSize={isEarlyGeneration ? 11 : 10}
           fontWeight={700}
           fill="#9a3412"
           fontStyle="italic"
@@ -264,9 +467,9 @@ function TreeNode({ node, isSelected, onSelect, onToggleCollapse }: TreeNodeProp
 
       <text
         x={centerX}
-        y={y + NODE_HEIGHT - 9}
+        y={y + height - 9}
         textAnchor="middle"
-        fontSize={9}
+        fontSize={isEarlyGeneration ? 10 : 9}
         fill={isEarlyGeneration ? '#92400e' : '#6b7280'}
         fontWeight={isEarlyGeneration ? 500 : 400}
         style={{ userSelect: 'none' }}
@@ -278,8 +481,8 @@ function TreeNode({ node, isSelected, onSelect, onToggleCollapse }: TreeNodeProp
         <rect
           x={x - 3}
           y={y - 3}
-          width={NODE_WIDTH + 6}
-          height={NODE_HEIGHT + 6}
+          width={width + 6}
+          height={height + 6}
           rx={11}
           fill="none"
           stroke="#9a3412"
@@ -310,7 +513,7 @@ function TreeNode({ node, isSelected, onSelect, onToggleCollapse }: TreeNodeProp
         >
           <circle
             cx={centerX}
-            cy={y + NODE_HEIGHT}
+            cy={y + height}
             r={9}
             fill="#ffffff"
             stroke={collapseBorder}
@@ -318,7 +521,7 @@ function TreeNode({ node, isSelected, onSelect, onToggleCollapse }: TreeNodeProp
           />
           <text
             x={centerX}
-            y={y + NODE_HEIGHT + 5}
+            y={y + height + 5}
             textAnchor="middle"
             fontSize={14}
             fontWeight={700}
@@ -331,6 +534,17 @@ function TreeNode({ node, isSelected, onSelect, onToggleCollapse }: TreeNodeProp
       )}
     </g>
   );
+}
+
+// Render ngôi sao 5 cánh đơn giản dùng path
+function Star({ cx, cy, r, fill, stroke, strokeWidth }: { cx: number; cy: number; r: number; fill: string; stroke: string; strokeWidth: number }) {
+  const points: string[] = [];
+  for (let i = 0; i < 10; i += 1) {
+    const angle = (Math.PI / 5) * i - Math.PI / 2;
+    const radius = i % 2 === 0 ? r : r * 0.42;
+    points.push(`${cx + Math.cos(angle) * radius},${cy + Math.sin(angle) * radius}`);
+  }
+  return <polygon points={points.join(' ')} fill={fill} stroke={stroke} strokeWidth={strokeWidth} strokeLinejoin="round" />;
 }
 
 function TreeConnection({ connection }: { connection: TreeConnectionData }) {
@@ -399,8 +613,8 @@ function Minimap({
           {nodes.map((node) => (
             <circle
               key={node.person.id}
-              cx={node.x + offsetX + NODE_WIDTH / 2}
-              cy={node.y + NODE_HEIGHT / 2}
+              cx={node.x + offsetX + node.width / 2}
+              cy={node.y + node.height / 2}
               r={3.5 / minimapScale}
               fill={
                 node.person.gender === 1
@@ -642,6 +856,21 @@ function buildTreeLayout(
     if (fallbackRoot) roots.push(fallbackRoot.id);
   }
 
+  const personWidths = new Map<string, number>();
+  for (const person of people) {
+    personWidths.set(person.id, getNodeWidth(person));
+  }
+
+  const getCoupleWidth = (personId: string) => {
+    const spouses = getVisibleSpouses(personId);
+    const ownWidth = personWidths.get(personId) ?? NODE_WIDTH;
+    let width = ownWidth;
+    for (const spouseId of spouses) {
+      width += COUPLE_GAP + (personWidths.get(spouseId) ?? NODE_WIDTH);
+    }
+    return width;
+  };
+
   const siblingGap = (firstId: string, secondId: string) => {
     const firstHasChildren =
       !collapsedNodes.has(firstId) && getVisibleChildren(firstId).length > 0;
@@ -656,14 +885,13 @@ function buildTreeLayout(
   const computeSubtreeWidth = (personId: string): number => {
     const cached = subtreeWidths.get(personId);
     if (cached !== undefined) return cached;
-    if (calculatingWidths.has(personId)) return NODE_WIDTH;
+    if (calculatingWidths.has(personId)) return personWidths.get(personId) ?? NODE_WIDTH;
 
     calculatingWidths.add(personId);
-    const spouses = getVisibleSpouses(personId);
     const visibleChildren = collapsedNodes.has(personId)
       ? []
       : getVisibleChildren(personId);
-    const coupleWidth = NODE_WIDTH + spouses.length * (COUPLE_GAP + NODE_WIDTH);
+    const coupleWidth = getCoupleWidth(personId);
     let childrenWidth = 0;
 
     visibleChildren.forEach((childId, index) => {
@@ -690,17 +918,20 @@ function buildTreeLayout(
 
     const subtreeWidth = subtreeWidths.get(personId) ?? NODE_WIDTH;
     const spouses = getVisibleSpouses(personId);
+    const ownWidth = personWidths.get(personId) ?? NODE_WIDTH;
     const visibleChildren = collapsedNodes.has(personId)
       ? []
       : getVisibleChildren(personId);
-    const coupleWidth = NODE_WIDTH + spouses.length * (COUPLE_GAP + NODE_WIDTH);
+    const coupleWidth = getCoupleWidth(personId);
     const centerX = startX + subtreeWidth / 2;
     const anchorX = centerX - coupleWidth / 2;
 
     xPositions.set(personId, anchorX);
-    spouses.forEach((spouseId, index) => {
-      xPositions.set(spouseId, anchorX + (index + 1) * (NODE_WIDTH + COUPLE_GAP));
+    let spouseCursor = anchorX + ownWidth;
+    spouses.forEach((spouseId) => {
+      xPositions.set(spouseId, spouseCursor + COUPLE_GAP);
       assignedPeople.add(spouseId);
+      spouseCursor += COUPLE_GAP + (personWidths.get(spouseId) ?? NODE_WIDTH);
     });
 
     if (visibleChildren.length === 0) return;
@@ -741,12 +972,23 @@ function buildTreeLayout(
     person,
     x: xPositions.get(person.id)!,
     y: (person.generation - minGeneration) * LEVEL_HEIGHT + 20,
+    width: getNodeWidth(person),
+    height: getNodeHeight(person),
     isCollapsed: collapsedNodes.has(person.id),
     hasChildren: getAllChildren(person.id).length > 0,
     isSpouse: positionedAsSpouse.has(person.id),
   }));
   const personPositions = new Map(
-    nodes.map((node) => [node.person.id, { x: node.x, y: node.y }])
+    nodes.map((node) => [
+      node.person.id,
+      {
+        x: node.x,
+        y: node.y,
+        width: node.width,
+        height: node.height,
+        bodyCenterOffset: getNodeBodyCenterOffset(node.person),
+      },
+    ])
   );
   const connections: TreeConnectionData[] = [];
 
@@ -760,18 +1002,16 @@ function buildTreeLayout(
 
     if (anchorPosition && spousePosition) {
       const anchorIsLeft = anchorPosition.x <= spousePosition.x;
+      const anchorY = anchorPosition.y + anchorPosition.bodyCenterOffset;
+      const spouseY = spousePosition.y + spousePosition.bodyCenterOffset;
       connections.push({
         id: `couple-${family.id}`,
         x1: anchorIsLeft
           ? spousePosition.x - COUPLE_GAP
-          : spousePosition.x + NODE_WIDTH + COUPLE_GAP,
-        y1: anchorIsLeft
-          ? anchorPosition.y + NODE_HEIGHT / 2
-          : spousePosition.y + NODE_HEIGHT / 2,
+          : spousePosition.x + spousePosition.width + COUPLE_GAP,
+        y1: anchorIsLeft ? anchorY : spouseY,
         x2: anchorIsLeft ? spousePosition.x : anchorPosition.x,
-        y2: anchorIsLeft
-          ? spousePosition.y + NODE_HEIGHT / 2
-          : anchorPosition.y + NODE_HEIGHT / 2,
+        y2: anchorIsLeft ? spouseY : anchorY,
         type: 'couple',
       });
     }
@@ -783,10 +1023,10 @@ function buildTreeLayout(
 
     const familyCenterX =
       anchorPosition && spousePosition
-        ? (Math.min(anchorPosition.x, spousePosition.x) + NODE_WIDTH +
+        ? (Math.min(anchorPosition.x, spousePosition.x) + (anchorPosition.x <= spousePosition.x ? anchorPosition.width : spousePosition.width) +
             Math.max(anchorPosition.x, spousePosition.x)) /
           2
-        : parentPosition.x + NODE_WIDTH / 2;
+        : parentPosition.x + parentPosition.width / 2;
 
     for (const child of childrenByFamily.get(family.id) ?? []) {
       const childPosition = personPositions.get(child.person_id);
@@ -795,8 +1035,8 @@ function buildTreeLayout(
       connections.push({
         id: `child-${family.id}-${child.person_id}`,
         x1: familyCenterX,
-        y1: parentPosition.y + NODE_HEIGHT,
-        x2: childPosition.x + NODE_WIDTH / 2,
+        y1: parentPosition.y + parentPosition.height,
+        x2: childPosition.x + childPosition.width / 2,
         y2: childPosition.y,
         type: 'parent-child',
       });
@@ -809,8 +1049,8 @@ function buildTreeLayout(
 
   for (const node of nodes) {
     minX = Math.min(minX, node.x);
-    maxX = Math.max(maxX, node.x + NODE_WIDTH);
-    maxY = Math.max(maxY, node.y + NODE_HEIGHT);
+    maxX = Math.max(maxX, node.x + node.width);
+    maxY = Math.max(maxY, node.y + node.height);
   }
 
   if (!Number.isFinite(minX)) {
@@ -914,8 +1154,8 @@ export function FamilyTree({ people, families, children }: Props) {
     const targetNode = layout.nodes.find((node) => node.person.id === selectedPerson.id);
     if (!targetNode) return;
 
-    const nodeCenterX = targetNode.x + layout.offsetX + NODE_WIDTH / 2;
-    const nodeCenterY = targetNode.y + NODE_HEIGHT / 2;
+    const nodeCenterX = targetNode.x + layout.offsetX + targetNode.width / 2;
+    const nodeCenterY = targetNode.y + getNodeBodyCenterOffset(targetNode.person);
 
     const nextPan = {
       x: containerSize.width / 2 - nodeCenterX * scale,
@@ -1250,9 +1490,11 @@ export function FamilyTree({ people, families, children }: Props) {
       for (const node of layout.nodes) {
         const x = node.x;
         const y = node.y;
+        const w = node.width;
+        const h = node.height;
         const p = node.person;
-        const isEarlyGen = p.generation === 1 || p.generation === 2;
         const isRootGen = p.generation === 1;
+        const isEarlyGen = p.generation === 1 || p.generation === 2;
         const fill = isEarlyGen
           ? p.gender === 1 ? '#fef3c7' : '#fff7ed'
           : p.gender === 1 ? '#dbeafe' : '#fce7f3';
@@ -1265,13 +1507,40 @@ export function FamilyTree({ people, families, children }: Props) {
         const years = p.birth_year ? `${birth}${death}` : '';
         const strokeW = isRootGen ? 2.5 : 1.5;
 
-        svgParts.push(`
-          <g>
-            <rect x="${x}" y="${y}" width="${NODE_WIDTH}" height="${NODE_HEIGHT}" rx="8" fill="${fill}" stroke="${border}" stroke-width="${strokeW}"/>
-            <text x="${x + NODE_WIDTH / 2}" y="${y + 32}" text-anchor="middle" font-family="system-ui" font-size="${isEarlyGen ? 12 : 11}" font-weight="${isEarlyGen ? 700 : 600}" fill="${isEarlyGen ? '#78350f' : '#1f2937'}">${name}</text>
-            <text x="${x + NODE_WIDTH / 2}" y="${y + 56}" text-anchor="middle" font-family="system-ui" font-size="12" fill="${isEarlyGen ? '#92400e' : '#6b7280'}">${years}</text>
-          </g>
-        `);
+        if (isRootGen) {
+          const archH = ROOT_GEN_ARCH_HEIGHT;
+          const bodyH = ROOT_GEN_BODY_HEIGHT;
+          const archTopY = y;
+          const bodyTopY = archTopY + archH;
+          const archPath = `M ${x} ${bodyTopY} Q ${x} ${archTopY} ${x + w / 2} ${archTopY} Q ${x + w} ${archTopY} ${x + w} ${bodyTopY} Z`;
+          const nameY = bodyTopY + 28;
+          const treeLabelY = bodyTopY + 58;
+          const yearY = bodyTopY + bodyH - 12;
+
+          svgParts.push(`
+            <g>
+              <rect x="${x}" y="${bodyTopY}" width="${w}" height="${bodyH}" fill="${fill}" stroke="${border}" stroke-width="${strokeW}"/>
+              <path d="${archPath}" fill="${fill}" stroke="${border}" stroke-width="${strokeW}" stroke-linejoin="round"/>
+              <text x="${x + w / 2}" y="${nameY}" text-anchor="middle" font-family="system-ui" font-size="15" font-weight="700" fill="#78350f">${name}</text>
+              <text x="${x + w / 2}" y="${treeLabelY}" text-anchor="middle" font-family="system-ui" font-size="11" font-weight="700" font-style="italic" fill="#9a3412">${p.tree_label ?? ''}</text>
+              <text x="${x + w / 2}" y="${yearY}" text-anchor="middle" font-family="system-ui" font-size="10" fill="#92400e">${years}</text>
+            </g>
+          `);
+        } else {
+          const nameSize = isEarlyGen ? 14 : 11;
+          const nameWeight = isEarlyGen ? 700 : 600;
+          const nameY = isEarlyGen ? y + 70 : y + 32;
+          const yearY = isEarlyGen ? y + 100 : y + 56;
+          const yearSize = isEarlyGen ? 13 : 12;
+
+          svgParts.push(`
+            <g>
+              <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="8" fill="${fill}" stroke="${border}" stroke-width="${strokeW}"/>
+              <text x="${x + w / 2}" y="${nameY}" text-anchor="middle" font-family="system-ui" font-size="${nameSize}" font-weight="${nameWeight}" fill="${isEarlyGen ? '#78350f' : '#1f2937'}">${name}</text>
+              <text x="${x + w / 2}" y="${yearY}" text-anchor="middle" font-family="system-ui" font-size="${yearSize}" fill="${isEarlyGen ? '#92400e' : '#6b7280'}">${years}</text>
+            </g>
+          `);
+        }
       }
 
       svgParts.push('</g></svg>');
