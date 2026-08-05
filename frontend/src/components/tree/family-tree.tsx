@@ -1,8 +1,8 @@
 /**
  * @project NguyenDinhHoaNgai
  * @file src/components/tree/family-tree.tsx
- * @description Interactive hierarchical family tree with zoom, pan, filters, collapse, focus branch and minimap
- * @version 2.5.0
+ * @description Interactive hierarchical family tree with zoom, pan, filters, collapse, focus branch, minimap and fullscreen
+ * @version 2.6.0
  * @updated 2026-08-05
  */
 
@@ -19,6 +19,7 @@ import {
   Download,
   GitBranch,
   Maximize2,
+  Minimize2,
   Move,
   RotateCcw,
   Search,
@@ -1092,6 +1093,7 @@ export function FamilyTree({ people, families, children }: Props) {
   const [filterDropdownOpen, setFilterDropdownOpen] = useState(false);
   const [containerSize, setContainerSize] = useState({ width: 800, height: 600 });
   const containerRef = useRef<HTMLDivElement>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const autoCollapseApplied = useRef(false);
   const pendingFocusPanRef = useRef(false);
 
@@ -1112,6 +1114,29 @@ export function FamilyTree({ people, families, children }: Props) {
     const observer = new ResizeObserver(updateSize);
     observer.observe(container);
     return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(document.fullscreenElement === containerRef.current);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  const handleToggleFullscreen = useCallback(async () => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else {
+        await container.requestFullscreen();
+      }
+    } catch (err) {
+      console.error('Fullscreen toggle failed:', err);
+    }
   }, []);
 
   useEffect(() => {
@@ -1818,6 +1843,16 @@ export function FamilyTree({ people, families, children }: Props) {
         >
           <Download className="h-4 w-4" />
           <span className="hidden sm:inline">Xuất PNG</span>
+        </Button>
+
+        <Button
+          variant="outline"
+          size="icon"
+          className="h-8 w-8 md:h-10 md:w-10"
+          aria-label={isFullscreen ? 'Thoát toàn màn hình' : 'Xem toàn màn hình'}
+          onClick={handleToggleFullscreen}
+        >
+          {isFullscreen ? <Minimize2 className="h-4 w-4 md:h-5 md:w-5" /> : <Maximize2 className="h-4 w-4 md:h-5 md:w-5" />}
         </Button>
 
         <div className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
