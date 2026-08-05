@@ -1563,29 +1563,33 @@ export function FamilyTree({ people, families, children }: Props) {
         img.src = svgUrl;
       });
 
-      const scale = 2;
+      const canvasScale = 2;
       const canvas = document.createElement('canvas');
-      canvas.width = svgW * scale;
-      canvas.height = svgH * scale;
-      const ctx = canvas.getContext('2d')!;
-      ctx.scale(scale, scale);
+      canvas.width = svgW * canvasScale;
+      canvas.height = svgH * canvasScale;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Canvas 2D context unavailable');
+      ctx.scale(canvasScale, canvasScale);
       ctx.drawImage(img, 0, 0, svgW, svgH);
       URL.revokeObjectURL(svgUrl);
 
       if (format === 'png') {
-        const link = document.createElement('a');
-        link.download = `gia-pha-${Date.now()}.png`;
-        link.href = canvas.toDataURL('image/png');
-        link.click();
+        const blob = await new Promise<Blob | null>((resolve) =>
+          canvas.toBlob((value) => resolve(value), 'image/png')
+        );
+        if (!blob) throw new Error('Không thể tạo blob PNG');
+        downloadBlob(blob, `gia-pha-${Date.now()}.png`);
       } else {
-        const imgData = canvas.toDataURL('image/png');
         const orientation = svgW > svgH ? 'landscape' : 'portrait';
-        const pdf = new jsPDF({ orientation, unit: 'px', format: [svgW, svgH] });
-        pdf.addImage(imgData, 'PNG', 0, 0, svgW, svgH);
-        pdf.save(`gia-pha-${Date.now()}.pdf`);
+        const pdf = new jsPDF({ orientation, unit: 'px', format: [svgW, svgH], compress: true });
+        const imgData = canvas.toDataURL('image/jpeg', 0.85);
+        pdf.addImage(imgData, 'JPEG', 0, 0, svgW, svgH);
+        const pdfBlob = pdf.output('blob');
+        downloadBlob(pdfBlob, `gia-pha-${Date.now()}.pdf`);
       }
     } catch (err) {
       console.error('Export failed:', err);
+      alert('Xuất ảnh/PDF thất bại. Thử xuất SVG hoặc giảm số thành viên hiển thị.');
     } finally {
       setExportLoading(false);
     }
