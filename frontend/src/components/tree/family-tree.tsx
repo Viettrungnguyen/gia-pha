@@ -1618,68 +1618,6 @@ export function FamilyTree({ people, families, children }: Props) {
     currentPanRef.current = next;
   };
 
-  const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
-    if (event.touches.length === 2) {
-      event.preventDefault();
-      setIsPanning(false);
-      const [t1, t2] = Array.from(event.touches);
-      const cx = (t1.clientX + t2.clientX) / 2;
-      const cy = (t1.clientY + t2.clientY) / 2;
-      const distance = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
-      pinchStartRef.current = {
-        distance,
-        centerX: cx,
-        centerY: cy,
-        scale,
-        pan,
-      };
-      return;
-    }
-    if (event.touches.length !== 1) return;
-    setIsPanning(true);
-    setPanStart({
-      x: event.touches[0].clientX - pan.x,
-      y: event.touches[0].clientY - pan.y,
-    });
-  };
-
-  const handleTouchMove = (event: React.TouchEvent<HTMLDivElement>) => {
-    if (event.touches.length === 2 && pinchStartRef.current) {
-      event.preventDefault();
-      const [t1, t2] = Array.from(event.touches);
-      const cx = (t1.clientX + t2.clientX) / 2;
-      const cy = (t1.clientY + t2.clientY) / 2;
-      const distance = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
-      const start = pinchStartRef.current;
-      const ratio = distance / start.distance;
-      const nextScale = Math.min(2, Math.max(0.3, start.scale * ratio));
-      const rect = containerRef.current?.getBoundingClientRect();
-      const pointX = rect ? cx - rect.left : cx;
-      const pointY = rect ? cy - rect.top : cy;
-      const worldX = (pointX - start.pan.x) / start.scale;
-      const worldY = (pointY - start.pan.y) / start.scale;
-      const nextPan = {
-        x: pointX - worldX * nextScale,
-        y: pointY - worldY * nextScale,
-      };
-      setScale(nextScale);
-      setPan(nextPan);
-      targetScaleRef.current = nextScale;
-      targetPanRef.current = nextPan;
-      currentScaleRef.current = nextScale;
-      currentPanRef.current = nextPan;
-      return;
-    }
-    if (!isPanning || event.touches.length !== 1) return;
-    const next = {
-      x: event.touches[0].clientX - panStart.x,
-      y: event.touches[0].clientY - panStart.y,
-    };
-    setPan(next);
-    targetPanRef.current = next;
-    currentPanRef.current = next;
-  };
-
   const handleReset = () => {
     const next = window.innerWidth < 768 ? 0.7 : 1;
     setScale(next);
@@ -1753,8 +1691,72 @@ export function FamilyTree({ people, families, children }: Props) {
     };
 
     container.addEventListener('wheel', onWheel, { passive: false });
+
+    const TOUCH_PINCH_THRESHOLD = 2;
+    const onTouchStart = (event: TouchEvent) => {
+      if (event.touches.length !== TOUCH_PINCH_THRESHOLD) {
+        pinchStartRef.current = null;
+        return;
+      }
+      event.preventDefault();
+      const [t1, t2] = Array.from(event.touches);
+      const cx = (t1.clientX + t2.clientX) / 2;
+      const cy = (t1.clientY + t2.clientY) / 2;
+      const distance = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+      pinchStartRef.current = {
+        distance,
+        centerX: cx,
+        centerY: cy,
+        scale: targetScaleRef.current,
+        pan: { ...targetPanRef.current },
+      };
+    };
+
+    const onTouchMove = (event: TouchEvent) => {
+      const start = pinchStartRef.current;
+      if (!start || event.touches.length !== TOUCH_PINCH_THRESHOLD) return;
+      event.preventDefault();
+      const [t1, t2] = Array.from(event.touches);
+      const cx = (t1.clientX + t2.clientX) / 2;
+      const cy = (t1.clientY + t2.clientY) / 2;
+      const distance = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+      if (distance < 1) return;
+      const ratio = distance / start.distance;
+      const nextScale = Math.min(2, Math.max(0.3, start.scale * ratio));
+      const rect = container.getBoundingClientRect();
+      const pointX = cx - rect.left;
+      const pointY = cy - rect.top;
+      const worldX = (pointX - start.pan.x) / start.scale;
+      const worldY = (pointY - start.pan.y) / start.scale;
+      const nextPan = {
+        x: pointX - worldX * nextScale,
+        y: pointY - worldY * nextScale,
+      };
+      targetScaleRef.current = nextScale;
+      targetPanRef.current = nextPan;
+      currentScaleRef.current = nextScale;
+      currentPanRef.current = nextPan;
+      setScale(nextScale);
+      setPan(nextPan);
+    };
+
+    const onTouchEnd = (event: TouchEvent) => {
+      if (event.touches.length < TOUCH_PINCH_THRESHOLD) {
+        pinchStartRef.current = null;
+      }
+    };
+
+    container.addEventListener('touchstart', onTouchStart, { passive: false });
+    container.addEventListener('touchmove', onTouchMove, { passive: false });
+    container.addEventListener('touchend', onTouchEnd, { passive: false });
+    container.addEventListener('touchcancel', onTouchEnd, { passive: false });
+
     return () => {
       container.removeEventListener('wheel', onWheel);
+      container.removeEventListener('touchstart', onTouchStart);
+      container.removeEventListener('touchmove', onTouchMove);
+      container.removeEventListener('touchend', onTouchEnd);
+      container.removeEventListener('touchcancel', onTouchEnd);
       if (animFrameRef.current !== null) cancelAnimationFrame(animFrameRef.current);
     };
   }, []);
@@ -1995,17 +1997,7 @@ export function FamilyTree({ people, families, children }: Props) {
         onMouseMove={handleMouseMove}
         onMouseUp={() => setIsPanning(false)}
         onMouseLeave={() => setIsPanning(false)}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={() => {
-          pinchStartRef.current = null;
-          setIsPanning(false);
-        }}
-        onTouchCancel={() => {
-          pinchStartRef.current = null;
-          setIsPanning(false);
-        }}
-      >
+        >
         <svg width="100%" height="100%" aria-label="Cây gia phả dòng họ Nguyễn Đình">
           <g transform={`translate(${pan.x}, ${pan.y}) scale(${scale})`}>
             <g transform={`translate(${layout.offsetX}, 0)`}>
