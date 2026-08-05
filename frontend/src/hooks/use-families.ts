@@ -15,6 +15,7 @@ import {
   removeChild,
   deleteFamily,
   ensureFamilyAndAddChild,
+  removeAllChildrenLinks,
   type TreeData,
   type CreateFamilyInput,
 } from '@/lib/supabase-data-families';

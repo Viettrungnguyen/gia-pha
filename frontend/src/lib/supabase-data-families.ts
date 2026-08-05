@@ -74,11 +74,16 @@ export async function ensureFamilyAndAddChild(input: {
   sortOrder?: number;
 }): Promise<{ family: Family; childId: string }> {
   const { fatherId, motherId, personId, sortOrder = 0 } = input;
+
+  const supabase = getSupabaseBrowserClient();
+
+  // Xóa tất cả các liên kết cha mẹ cũ của người này
+  await removeAllChildrenLinks(personId);
+
+  // Nếu không có cha mẹ mới thì chỉ xóa liên kết cũ và thôi
   if (!fatherId && !motherId) {
     throw new Error('Cần chọn ít nhất cha hoặc mẹ để thêm con vào gia đình');
   }
-
-  const supabase = getSupabaseBrowserClient();
 
   const existing = await findFamilyByPair(fatherId, motherId);
   let family = existing;
@@ -94,6 +99,12 @@ export async function ensureFamilyAndAddChild(input: {
   if (childErr) throw childErr;
 
   return { family, childId: childRow.id };
+}
+
+export async function removeAllChildrenLinks(personId: string): Promise<void> {
+  const supabase = getSupabaseBrowserClient();
+  const { error } = await supabase.from('children').delete().eq('person_id', personId);
+  if (error) throw error;
 }
 
 export async function addChild(familyId: string, personId: string, sortOrder: number = 0): Promise<void> {

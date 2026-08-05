@@ -26,6 +26,7 @@ import {
   validateAvatarFile,
   MAX_AVATAR_BYTES,
 } from '@/lib/supabase-data-people';
+import { removeAllChildrenLinks } from '@/lib/supabase-data-families';
 import { Loader2, Save, X } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Person } from '@/types';
@@ -366,6 +367,10 @@ export function PersonForm({ initial, onSuccess }: PersonFormProps) {
             motherName ? ` và ${motherName}` : ''
           }`
         );
+      } else if (isEdit) {
+        // Nếu bỏ trống cả cha và mẹ trong chế độ edit, xóa liên kết cũ
+        await removeAllChildrenLinks(saved.id);
+        toast.success('Đã xóa liên kết cha mẹ');
       }
 
       onSuccess();
