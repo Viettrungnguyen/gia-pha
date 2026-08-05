@@ -540,7 +540,7 @@ function TreeConnection({ connection }: { connection: TreeConnectionData }) {
   const { x1, y1, x2, y2, type } = connection;
 
   if (type === 'couple') {
-    return <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#f472b6" strokeWidth={2} />;
+    return <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#f472b6" strokeWidth={3} />;
   }
 
   const middleY = y1 + (y2 - y1) / 2;
@@ -548,8 +548,8 @@ function TreeConnection({ connection }: { connection: TreeConnectionData }) {
     <path
       d={`M ${x1} ${y1} L ${x1} ${middleY} L ${x2} ${middleY} L ${x2} ${y2}`}
       fill="none"
-      stroke="#9ca3af"
-      strokeWidth={1.5}
+      stroke="#eab308"
+      strokeWidth={2.5}
     />
   );
 }
@@ -1366,10 +1366,10 @@ export function FamilyTree({ people, families, children }: Props) {
         const { x1, y1, x2, y2, type } = conn;
 
         if (type === 'couple') {
-          svgParts.push(`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#f472b6" stroke-width="2"/>`);
+          svgParts.push(`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#f472b6" stroke-width="3"/>`);
         } else {
           const middleY = y1 + (y2 - y1) / 2;
-          svgParts.push(`<path d="M ${x1} ${y1} L ${x1} ${middleY} L ${x2} ${middleY} L ${x2} ${y2}" fill="none" stroke="#9ca3af" stroke-width="1.5"/>`);
+          svgParts.push(`<path d="M ${x1} ${y1} L ${x1} ${middleY} L ${x2} ${middleY} L ${x2} ${y2}" fill="none" stroke="#eab308" stroke-width="2.5"/>`);
         }
       }
 
