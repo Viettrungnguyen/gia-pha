@@ -2,7 +2,7 @@
  * @project NguyenDinhHoaNgai
  * @file src/components/tree/family-tree.tsx
  * @description Interactive hierarchical family tree with zoom, pan, filters, collapse, focus branch and minimap
- * @version 2.4.0
+ * @version 2.5.0
  * @updated 2026-08-05
  */
 
@@ -63,6 +63,7 @@ interface TreeNodeData {
   y: number;
   isCollapsed: boolean;
   hasChildren: boolean;
+  isSpouse: boolean;
 }
 
 interface TreeConnectionData {
@@ -112,11 +113,25 @@ function wrapName(name: string, charsPerLine = 18): [string, string | null] {
 }
 
 function TreeNode({ node, isSelected, onSelect, onToggleCollapse }: TreeNodeProps) {
-  const { person, x, y, isCollapsed, hasChildren } = node;
+  const { person, x, y, isCollapsed, hasChildren, isSpouse } = node;
   const isMale = person.gender === 1;
-  const nodeBackground = isMale ? '#eff6ff' : '#fff1f2';
-  const nodeBorder = isSelected ? '#9a3412' : isMale ? '#60a5fa' : '#f472b6';
-  const avatarBackground = isMale ? '#bfdbfe' : '#fecdd3';
+  const isEarlyGeneration = person.generation === 1 || person.generation === 2;
+  const isDaughterInLaw = isSpouse && !isMale;
+
+  const nodeBackground = isEarlyGeneration
+    ? isMale ? '#fef3c7' : '#fff7ed'
+    : isDaughterInLaw ? '#faf5ff'
+    : isMale ? '#eff6ff' : '#fff1f2';
+  const nodeBorder = isSelected
+    ? '#9a3412'
+    : isEarlyGeneration
+      ? isMale ? '#d97706' : '#ea580c'
+      : isDaughterInLaw ? '#a855f7'
+      : isMale ? '#60a5fa' : '#f472b6';
+  const avatarBackground = isEarlyGeneration
+    ? isMale ? '#fde68a' : '#fed7aa'
+    : isDaughterInLaw ? '#e9d5ff'
+    : isMale ? '#bfdbfe' : '#fecdd3';
   const collapseBorder = isMale ? '#93c5fd' : '#fda4af';
   const words = person.display_name.trim().split(/\s+/);
   const initial = (words.at(-1)?.charAt(0) || '?').toUpperCase();
@@ -138,6 +153,14 @@ function TreeNode({ node, isSelected, onSelect, onToggleCollapse }: TreeNodeProp
     }
   };
 
+  const isRootGeneration = person.generation === 1;
+  const isAncestorGeneration = person.generation === 2;
+  const generationBadge = isRootGeneration
+    ? '🌟'
+    : isAncestorGeneration
+      ? '✨'
+      : null;
+
   return (
     <g
       role="button"
@@ -148,6 +171,20 @@ function TreeNode({ node, isSelected, onSelect, onToggleCollapse }: TreeNodeProp
       onClick={() => onSelect(person)}
       onKeyDown={handleKeyDown}
     >
+      {isEarlyGeneration && (
+        <rect
+          x={x - 2}
+          y={y - 2}
+          width={NODE_WIDTH + 4}
+          height={NODE_HEIGHT + 4}
+          rx={10}
+          fill="none"
+          stroke={isRootGeneration ? '#b45309' : '#c2410c'}
+          strokeWidth={isRootGeneration ? 3 : 2}
+          strokeDasharray={isRootGeneration ? '6 3' : '4 2'}
+          opacity={0.5}
+        />
+      )}
       <rect
         x={x}
         y={y}
@@ -156,10 +193,22 @@ function TreeNode({ node, isSelected, onSelect, onToggleCollapse }: TreeNodeProp
         rx={8}
         fill={nodeBackground}
         stroke={nodeBorder}
-        strokeWidth={isSelected ? 2.5 : 1.5}
+        strokeWidth={isSelected ? 2.5 : isRootGeneration ? 2.5 : 1.5}
       />
 
       <circle cx={centerX} cy={y + 24} r={13} fill={avatarBackground} />
+      {generationBadge && (
+        <text
+          x={centerX + 10}
+          y={y + 14}
+          textAnchor="middle"
+          fontSize={10}
+          fontWeight={700}
+          fill="#92400e"
+        >
+          {generationBadge}
+        </text>
+      )}
       <text
         x={centerX}
         y={y + 29}
@@ -176,9 +225,9 @@ function TreeNode({ node, isSelected, onSelect, onToggleCollapse }: TreeNodeProp
         x={centerX}
         y={nameLine1Y}
         textAnchor="middle"
-        fontSize={11}
-        fontWeight={600}
-        fill="#1f2937"
+        fontSize={isRootGeneration ? 12 : 11}
+        fontWeight={isEarlyGeneration ? 700 : 600}
+        fill={isEarlyGeneration ? '#78350f' : '#1f2937'}
         style={{ userSelect: 'none' }}
       >
         {line1}
@@ -189,9 +238,9 @@ function TreeNode({ node, isSelected, onSelect, onToggleCollapse }: TreeNodeProp
           x={centerX}
           y={y + 65}
           textAnchor="middle"
-          fontSize={11}
-          fontWeight={600}
-          fill="#1f2937"
+          fontSize={isRootGeneration ? 12 : 11}
+          fontWeight={isEarlyGeneration ? 700 : 600}
+          fill={isEarlyGeneration ? '#78350f' : '#1f2937'}
           style={{ userSelect: 'none' }}
         >
           {line2}
@@ -218,7 +267,8 @@ function TreeNode({ node, isSelected, onSelect, onToggleCollapse }: TreeNodeProp
         y={y + NODE_HEIGHT - 9}
         textAnchor="middle"
         fontSize={9}
-        fill="#6b7280"
+        fill={isEarlyGeneration ? '#92400e' : '#6b7280'}
+        fontWeight={isEarlyGeneration ? 500 : 400}
         style={{ userSelect: 'none' }}
       >
         {meta}
@@ -352,7 +402,11 @@ function Minimap({
               cx={node.x + offsetX + NODE_WIDTH / 2}
               cy={node.y + NODE_HEIGHT / 2}
               r={3.5 / minimapScale}
-              fill={node.person.gender === 1 ? '#60a5fa' : '#f472b6'}
+              fill={
+                node.person.gender === 1
+                  ? node.isSpouse ? '#60a5fa' : '#60a5fa'
+                  : node.isSpouse ? '#a855f7' : '#f472b6'
+              }
             />
           ))}
           <rect
@@ -689,6 +743,7 @@ function buildTreeLayout(
     y: (person.generation - minGeneration) * LEVEL_HEIGHT + 20,
     isCollapsed: collapsedNodes.has(person.id),
     hasChildren: getAllChildren(person.id).length > 0,
+    isSpouse: positionedAsSpouse.has(person.id),
   }));
   const personPositions = new Map(
     nodes.map((node) => [node.person.id, { x: node.x, y: node.y }])
@@ -1196,18 +1251,25 @@ export function FamilyTree({ people, families, children }: Props) {
         const x = node.x;
         const y = node.y;
         const p = node.person;
-        const fill = p.gender === 1 ? '#dbeafe' : '#fce7f3';
-        const border = p.gender === 1 ? '#3b82f6' : '#ec4899';
+        const isEarlyGen = p.generation === 1 || p.generation === 2;
+        const isRootGen = p.generation === 1;
+        const fill = isEarlyGen
+          ? p.gender === 1 ? '#fef3c7' : '#fff7ed'
+          : p.gender === 1 ? '#dbeafe' : '#fce7f3';
+        const border = isEarlyGen
+          ? p.gender === 1 ? '#d97706' : '#ea580c'
+          : p.gender === 1 ? '#3b82f6' : '#ec4899';
         const name = (p.display_name || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const birth = p.birth_year ? `(${p.birth_year}` : '(';
         const death = p.death_year ? `–${p.death_year})` : ')';
         const years = p.birth_year ? `${birth}${death}` : '';
+        const strokeW = isRootGen ? 2.5 : 1.5;
 
         svgParts.push(`
           <g>
-            <rect x="${x}" y="${y}" width="${NODE_WIDTH}" height="${NODE_HEIGHT}" rx="8" fill="${fill}" stroke="${border}" stroke-width="2"/>
-            <text x="${x + NODE_WIDTH / 2}" y="${y + 32}" text-anchor="middle" font-family="system-ui" font-size="14" font-weight="600" fill="#1f2937">${name}</text>
-            <text x="${x + NODE_WIDTH / 2}" y="${y + 56}" text-anchor="middle" font-family="system-ui" font-size="12" fill="#6b7280">${years}</text>
+            <rect x="${x}" y="${y}" width="${NODE_WIDTH}" height="${NODE_HEIGHT}" rx="8" fill="${fill}" stroke="${border}" stroke-width="${strokeW}"/>
+            <text x="${x + NODE_WIDTH / 2}" y="${y + 32}" text-anchor="middle" font-family="system-ui" font-size="${isEarlyGen ? 12 : 11}" font-weight="${isEarlyGen ? 700 : 600}" fill="${isEarlyGen ? '#78350f' : '#1f2937'}">${name}</text>
+            <text x="${x + NODE_WIDTH / 2}" y="${y + 56}" text-anchor="middle" font-family="system-ui" font-size="12" fill="${isEarlyGen ? '#92400e' : '#6b7280'}">${years}</text>
           </g>
         `);
       }
@@ -1653,6 +1715,29 @@ export function FamilyTree({ people, families, children }: Props) {
             }
           />
         )}
+      </div>
+
+      <div className="flex flex-wrap items-center justify-center gap-6 rounded-lg border-2 border-primary/30 bg-gradient-to-r from-amber-50/60 to-orange-50/60 px-4 py-3 text-sm text-foreground">
+        <span className="flex items-center gap-2">
+          <span className="inline-block h-5 w-6 rounded bg-[#fef3c7] ring-2 ring-[#d97706]"></span>
+          Nam
+        </span>
+        <span className="flex items-center gap-2">
+          <span className="inline-block h-5 w-6 rounded bg-[#fff1f2] ring-2 ring-[#f472b6]"></span>
+          Nữ (con gái)
+        </span>
+        <span className="flex items-center gap-2">
+          <span className="inline-block h-5 w-6 rounded bg-[#faf5ff] ring-2 ring-[#a855f7]"></span>
+          Nữ (con dâu)
+        </span>
+        <span className="flex items-center gap-2">
+          <span className="inline-block h-5 w-6 rounded bg-[#fef3c7] ring-2 ring-dashed ring-[#b45309]"></span>
+          Đời 1
+        </span>
+        <span className="flex items-center gap-2">
+          <span className="inline-block h-5 w-6 rounded bg-[#fff7ed] ring-2 ring-dashed ring-[#c2410c]"></span>
+          Đời 2
+        </span>
       </div>
 
       {selectedPerson && (

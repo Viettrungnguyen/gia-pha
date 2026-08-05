@@ -24,7 +24,10 @@ export function SiteFooter() {
           <div>
             <h3 className="font-semibold">Liên hệ</h3>
             <p className="mt-2 text-muted-foreground">
-              Email: admin@nguyen-dinh.local
+              Email: nguyenviettrungk55@gmail.com
+            </p>
+            <p className="mt-1 text-muted-foreground">
+              Số điện thoại: 0978278180
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
               © {new Date().getFullYear()} {SITE_CONFIG.name}

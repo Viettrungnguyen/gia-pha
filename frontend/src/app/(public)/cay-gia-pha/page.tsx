@@ -34,7 +34,7 @@ export default function CayGiaPhaPage() {
   }
 
   return (
-    <main className="container mx-auto px-4 py-8">
+    <main className="mx-auto max-w-[1800px] px-1 py-6">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="flex items-center gap-2 text-3xl font-bold text-primary">
@@ -71,25 +71,6 @@ export default function CayGiaPhaPage() {
         <TreeFallbackList people={data.people} />
       )}
 
-      <Card className="mt-6">
-        <CardHeader>
-          <CardTitle className="text-base">Chú thích</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-1 text-sm text-muted-foreground">
-          <p>
-            <span className="inline-block h-3 w-3 rounded border-2 border-blue-500" /> Viền
-            xanh = Nam
-          </p>
-          <p>
-            <span className="inline-block h-3 w-3 rounded border-2 border-pink-500" /> Viền
-            hồng = Nữ
-          </p>
-          <p>
-            <span className="text-pink-500">Đường hồng</span> = Quan hệ vợ chồng
-          </p>
-          <p>† = Đã mất</p>
-        </CardContent>
-      </Card>
     </main>
   );
 }
