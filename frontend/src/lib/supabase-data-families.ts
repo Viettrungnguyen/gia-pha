@@ -16,6 +16,16 @@ export interface TreeData {
 }
 
 export async function getTreeData(): Promise<TreeData> {
+  // Dev-only fake tree (Local): bật bằng NEXT_PUBLIC_USE_FAKE_TREE=1 trong .env.local.
+  // Cờ NODE_ENV đảm bảo production build của Vercel không bao giờ gọi fake data,
+  // ngay cả khi env lỡ bị set.
+  if (
+    process.env.NODE_ENV !== 'production' &&
+    process.env.NEXT_PUBLIC_USE_FAKE_TREE === '1'
+  ) {
+    const { generateFakeTree } = await import('@/lib/dev-fake-tree');
+    return generateFakeTree();
+  }
   const supabase = getSupabaseBrowserClient();
   const { data: authData } = await supabase.auth.getUser();
   const peopleSource = authData.user ? 'people' : 'public_people';

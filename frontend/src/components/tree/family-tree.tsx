@@ -26,8 +26,6 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
-import html2canvas from 'html2canvas';
-import { jsPDF } from 'jspdf';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -1317,7 +1315,7 @@ export function FamilyTree({ people, families, children }: Props) {
   const [exportOpen, setExportOpen] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
 
-  const handleExport = async (format: 'png' | 'pdf' | 'svg' | 'gedcom') => {
+  const handleExport = async (format: 'png') => {
     setExportOpen(false);
     setExportLoading(true);
 
@@ -1330,157 +1328,21 @@ export function FamilyTree({ people, families, children }: Props) {
 
       const originalTransform = svgEl.querySelector('g')?.getAttribute('transform') ?? '';
 
-      if (format === 'svg') {
-        const clone = svgEl.cloneNode(true) as SVGSVGElement;
-        clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-
-        const vbStr = svgEl.getAttribute('viewBox') ?? '';
-        const vbParts = vbStr.split(' ').map(Number);
-        const vbPad = 60;
-        clone.setAttribute(
-          'viewBox',
-          `${(vbParts[0] ?? 0) - vbPad} ${(vbParts[1] ?? 0) - vbPad} ${(vbParts[2] ?? 1200) + vbPad * 2} ${(vbParts[3] ?? 800) + vbPad * 2}`
-        );
-        clone.setAttribute('width', String((vbParts[2] ?? 1200) + vbPad * 2));
-        clone.setAttribute('height', String((vbParts[3] ?? 800) + vbPad * 2));
-
-        const serializer = new XMLSerializer();
-        let svgStr = serializer.serializeToString(clone);
-        svgStr = svgStr.replace(/^<\?xml[^>]+\?>/, '');
-
-        const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
-        downloadBlob(blob, `gia-pha-${Date.now()}.svg`);
-        return;
-      }
-
-      if (format === 'gedcom') {
-        const lines: string[] = [];
-        const add = (level: number, tag: string, value = '') =>
-          lines.push(`${level} ${tag}${value ? ` ${value}` : ''}`);
-
-        const now = new Date().toISOString().split('T')[0];
-        add(0, 'HEAD');
-        add(1, 'SOUR', 'NguyenDinhHoaNgai');
-        add(2, 'VERS', '7.0');
-        add(2, 'NAME', 'Gia phả điện tử - Dòng họ Nguyễn Đình, Làng Hòa Ngãi');
-        add(1, 'DEST', 'ANSTFILE');
-        add(1, 'DATE', now);
-        add(2, 'TIME', new Date().toTimeString().split(' ')[0]);
-        add(1, 'SUBM', '@SUBM@');
-        add(1, 'COPR', 'Dòng họ Nguyễn Đình - Làng Hòa Ngãi, Thanh Hà, Thanh Liêm, Hà Nam');
-        add(0, 'SUBN', '@SUBN@');
-
-        add(0, 'SUBM', '@SUBM@');
-        add(1, 'NAME', 'NguyenDinhHoaNgai');
-        add(1, 'ADDR');
-        add(2, 'CONT', 'Thôn Hòa Ngãi, Xã Thanh Hà');
-        add(2, 'CONT', 'Huyện Thanh Liêm, Tỉnh Hà Nam');
-
-        add(0, 'SUBN', '@SUBN@');
-        add(1, 'FAMF', 'NguyenDinhHoaNgai.ged');
-
-        const familyMap = new Map<string, Family>();
-        for (const f of families) familyMap.set(f.id, f);
-
-        const childToFamily = new Map<string, Family>();
-        for (const f of families) {
-          const childrenOfFam = children.filter((c) => c.family_id === f.id);
-          for (const c of childrenOfFam) childToFamily.set(c.person_id, f);
-        }
-
-        const usedFamilyIds = new Set<string>();
-        for (const child of children) usedFamilyIds.add(child.family_id);
-
-        for (const person of people) {
-          const id = person.handle || person.id;
-          const sex = person.gender === 1 ? 'M' : person.gender === 2 ? 'F' : 'U';
-
-          add(0, 'INDI', `@${id}@`);
-          add(1, 'REFN', id);
-
-          if (person.is_living) add(1, 'RESN', 'privacy');
-          else add(1, 'SEX', sex);
-
-          const parts = person.display_name.trim().split(/\s+/);
-          const surname = person.surname || parts.at(-1) || '';
-          const rest = parts.slice(0, -1).join(' ') || '?';
-
-          add(1, 'NAME', `${rest} /${surname}/`);
-          add(2, 'SURN', surname);
-          add(2, 'GIVN', rest);
-          if (person.tree_label) add(2, 'NICK', person.tree_label);
-          if (person.first_name) add(2, 'GIVN', person.first_name);
-
-          if (person.birth_date || person.birth_year) {
-            add(1, 'BIRT');
-            if (person.birth_date) add(2, 'DATE', person.birth_date);
-            if (person.birth_year) add(2, 'DATE', `${person.birth_year}`);
-            if (person.birth_place) { add(2, 'PLAC'); add(3, 'FORM', 'Địa danh'); add(3, 'CITY', person.birth_place); }
-          } else if (person.birth_year === null) {
-            add(1, 'BIRT');
-            add(2, 'DATE', 'ABT 1900');
-          }
-
-          if (!person.is_living && (person.death_date || person.death_year)) {
-            add(1, 'DEAT', 'Y');
-            if (person.death_date) add(2, 'DATE', person.death_date);
-            else if (person.death_year) add(2, 'DATE', `${person.death_year}`);
-            if (person.death_place) { add(2, 'PLAC'); add(3, 'FORM', 'Địa danh'); add(3, 'CITY', person.death_place); }
-            if (person.death_lunar) add(3, 'NOTE', `Âm lịch: ${person.death_lunar}`);
-          }
-
-          if (person.hometown) { add(1, 'BIRT'); add(2, 'PLAC'); add(3, 'FORM', 'Địa danh'); add(3, 'CITY', person.hometown); }
-          if (person.address) { add(1, 'RESI'); add(2, 'ADDR'); add(3, 'CONT', person.address); }
-          if (person.occupation) add(1, 'OCCU', person.occupation);
-          if (person.notes) add(1, 'NOTE', escapeGedcom(person.notes));
-          if (person.biography) add(1, 'NOTE', escapeGedcom(person.biography));
-          add(1, 'FAMC', `@F${childToFamily.get(person.id)?.id ?? 'UNKNOWN'}@`);
-
-          const fams: string[] = [];
-          for (const family of families) {
-            if (family.father_id === person.id || family.mother_id === person.id) {
-              fams.push(`@F${family.id}@`);
-            }
-          }
-          for (const fam of fams) add(1, 'FAMS', fam);
-        }
-
-        for (const family of families) {
-          if (!usedFamilyIds.has(family.id)) continue;
-          const fid = `F${family.id}`;
-          add(0, 'FAM', `@${fid}@`);
-          if (family.father_id) add(1, 'HUSB', `@${people.find((p) => p.id === family.father_id)?.handle || family.father_id}@`);
-          if (family.mother_id) add(1, 'WIFE', `@${people.find((p) => p.id === family.mother_id)?.handle || family.mother_id}@`);
-          if (family.marriage_date) { add(1, 'MARR'); add(2, 'DATE', family.marriage_date); }
-          if (family.marriage_place) { add(2, 'PLAC'); add(3, 'CITY', family.marriage_place); }
-          const childrenOfFam = children.filter((c) => c.family_id === family.id).sort((a, b) => a.sort_order - b.sort_order);
-          for (const child of childrenOfFam) {
-            add(1, 'CHIL', `@${people.find((p) => p.id === child.person_id)?.handle || child.person_id}@`);
-          }
-          if (family.notes) add(1, 'NOTE', escapeGedcom(family.notes));
-        }
-
-        add(0, 'TRLR');
-        add(0, 'NOTE', 'Gia phả điện tử - Dòng họ Nguyễn Đình, Làng Hòa Ngãi, Thanh Hà, Thanh Liêm, Hà Nam');
-
-        const gedcomStr = lines.join('\r\n') + '\r\n';
-        const blob = new Blob([gedcomStr], { type: 'application/x-gedcom;charset=utf-8' });
-        downloadBlob(blob, `nguyen-dinh-hoa-ngai-${Date.now()}.ged`);
-        return;
-      }
-
       const layoutW = layout.width || 1200;
       const layoutH = layout.height || 800;
       const offsetX = layout.offsetX || 0;
       const padding = 40;
 
-      const svgW = layoutW + padding * 2;
-      const svgH = layoutH + padding * 2;
+      // Hệ số phóng to để ảnh nét hơn khi in/zoom. 3x = DPI cao gấp 3.
+      const SCALE = 3;
+
+      const svgW = (layoutW + padding * 2) * SCALE;
+      const svgH = (layoutH + padding * 2) * SCALE;
 
       const svgParts: string[] = [
         `<svg xmlns="http://www.w3.org/2000/svg" width="${svgW}" height="${svgH}" viewBox="0 0 ${svgW} ${svgH}">`,
         `<rect width="${svgW}" height="${svgH}" fill="white"/>`,
-        `<g transform="translate(${offsetX + padding}, ${padding})">`,
+        `<g transform="translate(${(offsetX + padding) * SCALE}, ${padding * SCALE}) scale(${SCALE})">`,
       ];
 
       for (const conn of layout.connections) {
@@ -1536,8 +1398,8 @@ export function FamilyTree({ people, families, children }: Props) {
         } else {
           const nameSize = isEarlyGen ? 14 : 11;
           const nameWeight = isEarlyGen ? 700 : 600;
-          const nameY = isEarlyGen ? y + 70 : y + 32;
-          const yearY = isEarlyGen ? y + 100 : y + 56;
+          const nameY = isEarlyGen ? y + h / 2 - 4 : y + 32;
+          const yearY = isEarlyGen ? y + h / 2 + 20 : y + 56;
           const yearSize = isEarlyGen ? 13 : 12;
 
           svgParts.push(`
@@ -1553,43 +1415,60 @@ export function FamilyTree({ people, families, children }: Props) {
       svgParts.push('</g></svg>');
 
       const svgStr = svgParts.join('');
-      const svgBlob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
-      const svgUrl = URL.createObjectURL(svgBlob);
+
+      const base64 = btoa(unescape(encodeURIComponent(svgStr)));
+      const dataUrl = `data:image/svg+xml;base64,${base64}`;
 
       const img = new Image();
+      img.crossOrigin = 'anonymous';
       await new Promise<void>((resolve, reject) => {
-        img.onload = () => resolve();
-        img.onerror = () => reject(new Error('Failed to load SVG as image'));
-        img.src = svgUrl;
+        const timer = window.setTimeout(
+          () => reject(new Error('SVG load timeout (quá nặng)')),
+          30000
+        );
+        img.onload = () => {
+          window.clearTimeout(timer);
+          resolve();
+        };
+        img.onerror = () => {
+          window.clearTimeout(timer);
+          reject(new Error('Không thể load SVG dưới dạng ảnh'));
+        };
+        img.src = dataUrl;
       });
 
-      const canvasScale = 2;
+      const MAX_CANVAS_DIM = 32000;
+
+      const canvasScale = Math.min(
+        1,
+        MAX_CANVAS_DIM / Math.max(svgW, svgH, 1)
+      );
       const canvas = document.createElement('canvas');
-      canvas.width = svgW * canvasScale;
-      canvas.height = svgH * canvasScale;
+      canvas.width = Math.max(1, Math.floor(svgW * canvasScale));
+      canvas.height = Math.max(1, Math.floor(svgH * canvasScale));
       const ctx = canvas.getContext('2d');
-      if (!ctx) throw new Error('Canvas 2D context unavailable');
+      if (!ctx) throw new Error('Trình duyệt không hỗ trợ canvas 2D');
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.scale(canvasScale, canvasScale);
       ctx.drawImage(img, 0, 0, svgW, svgH);
-      URL.revokeObjectURL(svgUrl);
 
       if (format === 'png') {
         const blob = await new Promise<Blob | null>((resolve) =>
           canvas.toBlob((value) => resolve(value), 'image/png')
         );
-        if (!blob) throw new Error('Không thể tạo blob PNG');
+        if (!blob) throw new Error('Không thể tạo blob PNG (canvas quá lớn hoặc bị chặn)');
         downloadBlob(blob, `gia-pha-${Date.now()}.png`);
-      } else {
-        const orientation = svgW > svgH ? 'landscape' : 'portrait';
-        const pdf = new jsPDF({ orientation, unit: 'px', format: [svgW, svgH], compress: true });
-        const imgData = canvas.toDataURL('image/jpeg', 0.85);
-        pdf.addImage(imgData, 'JPEG', 0, 0, svgW, svgH);
-        const pdfBlob = pdf.output('blob');
-        downloadBlob(pdfBlob, `gia-pha-${Date.now()}.pdf`);
       }
     } catch (err) {
       console.error('Export failed:', err);
-      alert('Xuất ảnh/PDF thất bại. Thử xuất SVG hoặc giảm số thành viên hiển thị.');
+      const msg = err instanceof Error ? err.message : 'Lỗi không xác định';
+      alert(
+        `Xuất PNG thất bại: ${msg}.\n\n` +
+          'Gợi ý: thử thu nhỏ kích thước cây hoặc lọc bớt thành viên.'
+      );
     } finally {
       setExportLoading(false);
     }
@@ -1931,49 +1810,15 @@ export function FamilyTree({ people, families, children }: Props) {
           <Maximize2 className="h-4 w-4" /> Minimap
         </Button>
 
-        <div className="relative">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setExportOpen((o) => !o)}
-            disabled={exportLoading}
-          >
-            <Download className="h-4 w-4" />
-            <span className="hidden sm:inline">Xuất</span>
-          </Button>
-          {exportOpen && (
-            <div className="absolute right-0 top-full z-50 mt-1 w-44 rounded-md border bg-background shadow-lg">
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 px-3 py-2 text-sm text-left hover:bg-muted"
-                onClick={() => handleExport('png')}
-              >
-                <span className="text-xs">📄 PNG</span> Hình ảnh (PNG)
-              </button>
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 px-3 py-2 text-sm text-left hover:bg-muted"
-                onClick={() => handleExport('pdf')}
-              >
-                <span className="text-xs">📕 PDF</span> Tài liệu (PDF)
-              </button>
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 px-3 py-2 text-sm text-left hover:bg-muted"
-                onClick={() => handleExport('svg')}
-              >
-                <span className="text-xs">🔗 SVG</span> Vector (SVG)
-              </button>
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 px-3 py-2 text-sm text-left hover:bg-muted"
-                onClick={() => handleExport('gedcom')}
-              >
-                <span className="text-xs">🌳 GEDCOM</span> Gia phả (GEDCOM)
-              </button>
-            </div>
-          )}
-        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => handleExport('png')}
+          disabled={exportLoading}
+        >
+          <Download className="h-4 w-4" />
+          <span className="hidden sm:inline">Xuất PNG</span>
+        </Button>
 
         <div className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
           <Move className="h-3 w-3" />

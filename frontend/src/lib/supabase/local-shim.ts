@@ -13,7 +13,12 @@ import type {
   Event,
   ClanDocument,
 } from '@/types';
-import { PEOPLE_SEED, FAMILIES_SEED, CHILDREN_SEED, EVENTS_SEED, DOCUMENTS_SEED } from './local-seed';
+import { EVENTS_SEED, DOCUMENTS_SEED } from './local-seed';
+import {
+  getSeedPeople,
+  getSeedFamilies,
+  getSeedChildren,
+} from './local-seed-expansion';
 
 type Row = Record<string, unknown>;
 
@@ -144,9 +149,9 @@ interface QueryState {
 
 function seedData() {
   return {
-    people: PEOPLE_SEED,
-    families: FAMILIES_SEED,
-    children: CHILDREN_SEED,
+    people: getSeedPeople(),
+    families: getSeedFamilies(),
+    children: getSeedChildren(),
     events: EVENTS_SEED,
     documents: DOCUMENTS_SEED,
   };
