@@ -2,7 +2,7 @@
  * @project NguyenDinhHoaNgai
  * @file src/components/tree/family-tree.tsx
  * @description Interactive hierarchical family tree with zoom, pan, filters, collapse, focus branch, minimap and fullscreen
- * @version 2.6.2
+ * @version 2.7.2
  * @updated 2026-08-05
  */
 
@@ -11,10 +11,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowDownFromLine,
-  ArrowUpFromLine,
-  ChevronDown,
-  ChevronRight,
+  ChevronsDownUp,
   Crosshair,
   Download,
   GitBranch,
@@ -30,13 +27,6 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import type { Child, Family, Person } from '@/types';
 
 interface Props {
@@ -1752,144 +1742,103 @@ export function FamilyTree({ people, families, children }: Props) {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed bg-muted/40 p-3">
-        <GitBranch className="h-4 w-4 shrink-0 text-muted-foreground" />
-        <span className="shrink-0 text-sm font-medium">Focus nhánh:</span>
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed bg-muted/40 p-2">
+      <GitBranch className="h-4 w-4 shrink-0 text-muted-foreground" />
+      <span className="shrink-0 text-sm font-medium">Xem theo tên:</span>
 
-        <div className="relative">
-          <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
-          <input
-            type="search"
-            value={filterSearch}
-            placeholder="Tìm thành viên..."
-            className="w-52 rounded-md border bg-background py-1.5 pl-8 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-            onChange={(event) => {
-              setFilterSearch(event.target.value);
-              setFilterDropdownOpen(event.target.value.trim().length >= 2);
-            }}
-            onFocus={() => setFilterDropdownOpen(filterSearch.trim().length >= 2)}
-            onBlur={() => window.setTimeout(() => setFilterDropdownOpen(false), 150)}
-          />
+      <div className="relative">
+        <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
+        <input
+          type="search"
+          value={filterSearch}
+          placeholder="Tìm thành viên..."
+          className="w-52 rounded-md border bg-background py-1.5 pl-8 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+          onChange={(event) => {
+            setFilterSearch(event.target.value);
+            setFilterDropdownOpen(event.target.value.trim().length >= 2);
+          }}
+          onFocus={() => setFilterDropdownOpen(filterSearch.trim().length >= 2)}
+          onBlur={() => window.setTimeout(() => setFilterDropdownOpen(false), 150)}
+        />
 
-          {filterDropdownOpen && (
-            <div className="absolute left-0 top-full z-50 mt-1 max-h-56 w-72 overflow-y-auto rounded-md border bg-background shadow-lg">
-              {searchResults.length > 0 ? (
-                searchResults.map((person) => (
-                  <button
-                    key={person.id}
-                    type="button"
-                    className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-muted"
-                    onMouseDown={() => handleFocusBranchSearch(person)}
+        {filterDropdownOpen && (
+          <div className="absolute left-0 top-full z-50 mt-1 max-h-56 w-72 overflow-y-auto rounded-md border bg-background shadow-lg">
+            {searchResults.length > 0 ? (
+              searchResults.map((person) => (
+                <button
+                  key={person.id}
+                  type="button"
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-muted"
+                  onMouseDown={() => handleFocusBranchSearch(person)}
+                >
+                  <span
+                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+                      person.gender === 1
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'bg-pink-100 text-pink-700'
+                    }`}
                   >
-                    <span
-                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
-                        person.gender === 1
-                          ? 'bg-blue-100 text-blue-700'
-                          : 'bg-pink-100 text-pink-700'
-                      }`}
-                    >
-                      {person.display_name.trim().split(/\s+/).at(-1)?.charAt(0)}
+                    {person.display_name.trim().split(/\s+/).at(-1)?.charAt(0)}
+                  </span>
+                  <span>
+                    <span className="block text-xs font-medium">{person.display_name}</span>
+                    <span className="block text-[10px] text-muted-foreground">
+                      Đời {person.generation}
                     </span>
-                    <span>
-                      <span className="block text-xs font-medium">{person.display_name}</span>
-                      <span className="block text-[10px] text-muted-foreground">
-                        Đời {person.generation}
-                      </span>
-                    </span>
-                  </button>
-                ))
-              ) : (
-                <p className="px-3 py-3 text-xs text-muted-foreground">
-                  Không tìm thấy thành viên.
-                </p>
-              )}
-            </div>
-          )}
-        </div>
+                  </span>
+                </button>
+              ))
+            ) : (
+              <p className="px-3 py-3 text-xs text-muted-foreground">
+                Không tìm thấy thành viên.
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-1 rounded-lg border p-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 md:h-10 md:w-10"
-            aria-label="Thu nhỏ"
-            onClick={() => setScale((current) => Math.max(0.3, current - 0.1))}
-          >
-            <ZoomOut className="h-4 w-4 md:h-5 md:w-5" />
-          </Button>
-          <span className="w-12 text-center text-sm">{Math.round(scale * 100)}%</span>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 md:h-10 md:w-10"
-            aria-label="Phóng to"
-            onClick={() => setScale((current) => Math.min(2, current + 0.1))}
-          >
-            <ZoomIn className="h-4 w-4 md:h-5 md:w-5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            aria-label="Đặt lại khung nhìn"
-            onClick={handleReset}
-          >
-            <RotateCcw className="h-4 w-4" />
-          </Button>
-        </div>
-
-        <Select value={viewMode} onValueChange={(value) => handleViewModeChange(value as ViewMode)}>
-          <SelectTrigger className="h-10 w-40">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">
-              <span className="flex items-center gap-2">
-                <Users className="h-4 w-4" /> Tất cả
-              </span>
-            </SelectItem>
-            <SelectItem value="ancestors">
-              <span className="flex items-center gap-2">
-                <ArrowUpFromLine className="h-4 w-4" /> Tổ tiên
-              </span>
-            </SelectItem>
-            <SelectItem value="descendants">
-              <span className="flex items-center gap-2">
-                <ArrowDownFromLine className="h-4 w-4" /> Con cháu
-              </span>
-            </SelectItem>
-          </SelectContent>
-        </Select>
-
-        <div className="flex items-center gap-1 rounded-lg border p-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 text-xs"
-            onClick={() => setCollapsedNodes(new Set())}
-          >
-            <ChevronDown className="h-3 w-3" /> Mở rộng
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 text-xs"
-            onClick={handleCollapseAll}
-          >
-            <ChevronRight className="h-3 w-3" /> Thu gọn
-          </Button>
-        </div>
-
+      <div className="flex items-center gap-1 rounded-md border bg-background p-0.5">
         <Button
-          variant={showMinimap ? 'secondary' : 'ghost'}
-          size="sm"
-          className="hidden md:flex"
-          onClick={() => setShowMinimap((current) => !current)}
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 md:h-8 md:w-8"
+          aria-label="Thu nhỏ"
+          onClick={() => setScale((current) => Math.max(0.3, current - 0.1))}
         >
-          <Maximize2 className="h-4 w-4" /> Minimap
+          <ZoomOut className="h-4 w-4 md:h-4 md:w-4" />
+        </Button>
+        <span className="w-12 text-center text-xs leading-none">{Math.round(scale * 100)}%</span>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 md:h-8 md:w-8"
+          aria-label="Phóng to"
+          onClick={() => setScale((current) => Math.min(2, current + 0.1))}
+        >
+          <ZoomIn className="h-4 w-4 md:h-4 md:w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 md:h-8 md:w-8"
+          aria-label="Đặt lại khung nhìn"
+          onClick={handleReset}
+        >
+          <RotateCcw className="h-4 w-4" />
+        </Button>
+      </div>
+
+      <div className="ml-auto flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-9"
+          aria-label="Mở rộng hết các nhánh"
+          onClick={() => setCollapsedNodes(new Set())}
+        >
+          <ChevronsDownUp className="h-4 w-4" />
+          <span className="hidden sm:inline">Xem toàn bộ</span>
         </Button>
 
         <Button
@@ -1899,23 +1848,19 @@ export function FamilyTree({ people, families, children }: Props) {
           disabled={exportLoading}
         >
           <Download className="h-4 w-4" />
-          <span className="hidden sm:inline">Xuất PNG</span>
+          <span className="hidden sm:inline">Xuất ảnh</span>
         </Button>
 
         <Button
           variant="outline"
           size="icon"
-          className="h-8 w-8 md:h-10 md:w-10"
+          className="h-7 w-7 md:h-9 md:w-9"
           aria-label={isFullscreen ? 'Thoát toàn màn hình' : 'Xem toàn màn hình'}
           onClick={handleToggleFullscreen}
         >
           {isFullscreen ? <Minimize2 className="h-4 w-4 md:h-5 md:w-5" /> : <Maximize2 className="h-4 w-4 md:h-5 md:w-5" />}
         </Button>
-
-        <div className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
-          <Move className="h-3 w-3" />
-          <span className="hidden sm:inline">Kéo để di chuyển</span>
-        </div>
+      </div>
       </div>
 
       {viewMode !== 'all' && selectedPerson && (
@@ -1932,16 +1877,33 @@ export function FamilyTree({ people, families, children }: Props) {
 
       <div
         ref={containerRef}
-        className={`relative h-[65vh] min-h-[440px] select-none overflow-hidden rounded-lg border bg-muted/30 ${
+        className={`relative h-[70vh] min-h-[560px] select-none overflow-hidden rounded-lg border bg-muted/30 ${
           isFullscreen ? 'h-screen w-screen rounded-none border-none bg-gradient-to-br from-amber-50 via-orange-50 to-rose-50' : ''
         }`}
-        style={{ cursor: isPanning ? 'grabbing' : 'grab', touchAction: 'none' }}
+        style={{
+          cursor: isPanning ? 'grabbing' : 'grab',
+          touchAction: 'none',
+          backgroundImage: 'url(/tree_center26.png)',
+          backgroundSize: '75%',
+          backgroundPosition: ' center',
+          backgroundRepeat: 'no-repeat',
+          backgroundColor: '#fff7ed',
+          opacity: isFullscreen ? 1 : 1,
+        }}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={() => setIsPanning(false)}
         onMouseLeave={() => setIsPanning(false)}
         >
         <svg width="100%" height="100%" aria-label="Cây gia phả dòng họ Nguyễn Đình">
+          <rect
+            x={0}
+            y={0}
+            width={Math.max(containerSize.width, 1)}
+            height={Math.max(containerSize.height, 1)}
+            fill="#000000"
+            opacity={isFullscreen ? 0.5 : 0.4}
+          />
           <g transform={`translate(${pan.x}, ${pan.y}) scale(${scale})`}>
             <g transform={`translate(${layout.offsetX}, 0)`}>
               {layout.connections.map((connection) => (
@@ -1977,25 +1939,25 @@ export function FamilyTree({ people, families, children }: Props) {
         )}
       </div>
 
-      <div className="flex flex-wrap items-center justify-center gap-6 rounded-lg border-2 border-primary/30 bg-gradient-to-r from-amber-50/60 to-orange-50/60 px-4 py-3 text-sm text-foreground">
-        <span className="flex items-center gap-2">
-          <span className="inline-block h-5 w-6 rounded bg-[#fef3c7] ring-2 ring-[#d97706]"></span>
+      <div className="flex flex-wrap items-center justify-start gap-3 rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-3 w-4 rounded-sm bg-[#fef3c7] ring-1 ring-[#d97706]"></span>
           Nam
         </span>
-        <span className="flex items-center gap-2">
-          <span className="inline-block h-5 w-6 rounded bg-[#fff1f2] ring-2 ring-[#f472b6]"></span>
-          Nữ (con gái)
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-3 w-4 rounded-sm bg-[#fff1f2] ring-1 ring-[#f472b6]"></span>
+          Con gái
         </span>
-        <span className="flex items-center gap-2">
-          <span className="inline-block h-5 w-6 rounded bg-[#faf5ff] ring-2 ring-[#a855f7]"></span>
-          Nữ (con dâu)
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-3 w-4 rounded-sm bg-[#faf5ff] ring-1 ring-[#a855f7]"></span>
+          Con dâu
         </span>
-        <span className="flex items-center gap-2">
-          <span className="inline-block h-5 w-6 rounded bg-[#fef3c7] ring-2 ring-dashed ring-[#b45309]"></span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-3 w-4 rounded-sm bg-[#fef3c7] ring-1 ring-dashed ring-[#b45309]"></span>
           Đời 1
         </span>
-        <span className="flex items-center gap-2">
-          <span className="inline-block h-5 w-6 rounded bg-[#fff7ed] ring-2 ring-dashed ring-[#c2410c]"></span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-3 w-4 rounded-sm bg-[#fff7ed] ring-1 ring-dashed ring-[#c2410c]"></span>
           Đời 2
         </span>
       </div>
@@ -2032,23 +1994,7 @@ export function FamilyTree({ people, families, children }: Props) {
                     onClick={() => handleFocusBranch(selectedPerson.id)}
                   >
                     <Crosshair className="h-4 w-4" />
-                    <span className="hidden sm:inline">Focus nhánh</span>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleViewModeChange('ancestors')}
-                  >
-                    <ArrowUpFromLine className="h-4 w-4" />
-                    <span className="hidden sm:inline">Tổ tiên</span>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleViewModeChange('descendants')}
-                  >
-                    <ArrowDownFromLine className="h-4 w-4" />
-                    <span className="hidden sm:inline">Con cháu</span>
+                    <span className="hidden sm:inline">Xem nhánh, chi</span>
                   </Button>
                 </>
               )}
