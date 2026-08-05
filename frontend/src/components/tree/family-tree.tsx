@@ -1079,6 +1079,13 @@ export function FamilyTree({ people, families, children }: Props) {
   const animFrameRef = useRef<number | null>(null);
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+  const pinchStartRef = useRef<{
+    distance: number;
+    centerX: number;
+    centerY: number;
+    scale: number;
+    pan: { x: number; y: number };
+  } | null>(null);
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
   const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<ViewMode>('all');
@@ -1612,6 +1619,22 @@ export function FamilyTree({ people, families, children }: Props) {
   };
 
   const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
+    if (event.touches.length === 2) {
+      event.preventDefault();
+      setIsPanning(false);
+      const [t1, t2] = Array.from(event.touches);
+      const cx = (t1.clientX + t2.clientX) / 2;
+      const cy = (t1.clientY + t2.clientY) / 2;
+      const distance = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+      pinchStartRef.current = {
+        distance,
+        centerX: cx,
+        centerY: cy,
+        scale,
+        pan,
+      };
+      return;
+    }
     if (event.touches.length !== 1) return;
     setIsPanning(true);
     setPanStart({
@@ -1621,6 +1644,32 @@ export function FamilyTree({ people, families, children }: Props) {
   };
 
   const handleTouchMove = (event: React.TouchEvent<HTMLDivElement>) => {
+    if (event.touches.length === 2 && pinchStartRef.current) {
+      event.preventDefault();
+      const [t1, t2] = Array.from(event.touches);
+      const cx = (t1.clientX + t2.clientX) / 2;
+      const cy = (t1.clientY + t2.clientY) / 2;
+      const distance = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+      const start = pinchStartRef.current;
+      const ratio = distance / start.distance;
+      const nextScale = Math.min(2, Math.max(0.3, start.scale * ratio));
+      const rect = containerRef.current?.getBoundingClientRect();
+      const pointX = rect ? cx - rect.left : cx;
+      const pointY = rect ? cy - rect.top : cy;
+      const worldX = (pointX - start.pan.x) / start.scale;
+      const worldY = (pointY - start.pan.y) / start.scale;
+      const nextPan = {
+        x: pointX - worldX * nextScale,
+        y: pointY - worldY * nextScale,
+      };
+      setScale(nextScale);
+      setPan(nextPan);
+      targetScaleRef.current = nextScale;
+      targetPanRef.current = nextPan;
+      currentScaleRef.current = nextScale;
+      currentPanRef.current = nextPan;
+      return;
+    }
     if (!isPanning || event.touches.length !== 1) return;
     const next = {
       x: event.touches[0].clientX - panStart.x,
@@ -1798,21 +1847,21 @@ export function FamilyTree({ people, families, children }: Props) {
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className="h-8 w-8 md:h-10 md:w-10"
             aria-label="Thu nhỏ"
             onClick={() => setScale((current) => Math.max(0.3, current - 0.1))}
           >
-            <ZoomOut className="h-4 w-4" />
+            <ZoomOut className="h-4 w-4 md:h-5 md:w-5" />
           </Button>
           <span className="w-12 text-center text-sm">{Math.round(scale * 100)}%</span>
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className="h-8 w-8 md:h-10 md:w-10"
             aria-label="Phóng to"
             onClick={() => setScale((current) => Math.min(2, current + 0.1))}
           >
-            <ZoomIn className="h-4 w-4" />
+            <ZoomIn className="h-4 w-4 md:h-5 md:w-5" />
           </Button>
           <Button
             variant="ghost"
@@ -1948,7 +1997,14 @@ export function FamilyTree({ people, families, children }: Props) {
         onMouseLeave={() => setIsPanning(false)}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
-        onTouchEnd={() => setIsPanning(false)}
+        onTouchEnd={() => {
+          pinchStartRef.current = null;
+          setIsPanning(false);
+        }}
+        onTouchCancel={() => {
+          pinchStartRef.current = null;
+          setIsPanning(false);
+        }}
       >
         <svg width="100%" height="100%" aria-label="Cây gia phả dòng họ Nguyễn Đình">
           <g transform={`translate(${pan.x}, ${pan.y}) scale(${scale})`}>
