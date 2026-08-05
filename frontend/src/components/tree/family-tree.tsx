@@ -2,7 +2,7 @@
  * @project NguyenDinhHoaNgai
  * @file src/components/tree/family-tree.tsx
  * @description Interactive hierarchical family tree with zoom, pan, filters, collapse, focus branch, minimap and fullscreen
- * @version 2.6.0
+ * @version 2.6.2
  * @updated 2026-08-05
  */
 
@@ -1085,6 +1085,8 @@ export function FamilyTree({ people, families, children }: Props) {
     scale: number;
     pan: { x: number; y: number };
   } | null>(null);
+  const touchPanStartRef = useRef<{ x: number; y: number; pan: { x: number; y: number } } | null>(null);
+  const touchMovedRef = useRef(false);
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
   const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<ViewMode>('all');
@@ -1601,56 +1603,111 @@ export function FamilyTree({ people, families, children }: Props) {
     container.addEventListener('wheel', onWheel, { passive: false });
 
     const TOUCH_PINCH_THRESHOLD = 2;
+    const TOUCH_MOVE_THRESHOLD = 6;
+
     const onTouchStart = (event: TouchEvent) => {
-      if (event.touches.length !== TOUCH_PINCH_THRESHOLD) {
+      if (event.touches.length === TOUCH_PINCH_THRESHOLD) {
+        pinchStartRef.current = {
+          distance: Math.hypot(
+            event.touches[0].clientX - event.touches[1].clientX,
+            event.touches[0].clientY - event.touches[1].clientY
+          ),
+          centerX: (event.touches[0].clientX + event.touches[1].clientX) / 2,
+          centerY: (event.touches[0].clientY + event.touches[1].clientY) / 2,
+          scale: targetScaleRef.current,
+          pan: { ...targetPanRef.current },
+        };
+        touchPanStartRef.current = null;
+        touchMovedRef.current = false;
+        return;
+      }
+
+      if (event.touches.length === 1) {
+        const touch = event.touches[0];
+        touchPanStartRef.current = {
+          x: touch.clientX,
+          y: touch.clientY,
+          pan: { ...targetPanRef.current },
+        };
+        touchMovedRef.current = false;
         pinchStartRef.current = null;
         return;
       }
-      event.preventDefault();
-      const [t1, t2] = Array.from(event.touches);
-      const cx = (t1.clientX + t2.clientX) / 2;
-      const cy = (t1.clientY + t2.clientY) / 2;
-      const distance = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
-      pinchStartRef.current = {
-        distance,
-        centerX: cx,
-        centerY: cy,
-        scale: targetScaleRef.current,
-        pan: { ...targetPanRef.current },
-      };
+
+      touchPanStartRef.current = null;
+      pinchStartRef.current = null;
+      touchMovedRef.current = false;
     };
 
     const onTouchMove = (event: TouchEvent) => {
       const start = pinchStartRef.current;
-      if (!start || event.touches.length !== TOUCH_PINCH_THRESHOLD) return;
+      if (start && event.touches.length === TOUCH_PINCH_THRESHOLD) {
+        event.preventDefault();
+        const [t1, t2] = Array.from(event.touches);
+        const cx = (t1.clientX + t2.clientX) / 2;
+        const cy = (t1.clientY + t2.clientY) / 2;
+        const distance = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+        if (distance < 1) return;
+        const ratio = distance / start.distance;
+        const nextScale = Math.min(2, Math.max(0.3, start.scale * ratio));
+        const rect = container.getBoundingClientRect();
+        const pointX = cx - rect.left;
+        const pointY = cy - rect.top;
+        const worldX = (pointX - start.pan.x) / start.scale;
+        const worldY = (pointY - start.pan.y) / start.scale;
+        const nextPan = {
+          x: pointX - worldX * nextScale,
+          y: pointY - worldY * nextScale,
+        };
+        targetScaleRef.current = nextScale;
+        targetPanRef.current = nextPan;
+        currentScaleRef.current = nextScale;
+        currentPanRef.current = nextPan;
+        setScale(nextScale);
+        setPan(nextPan);
+        touchPanStartRef.current = null;
+        return;
+      }
+
+      const panStart = touchPanStartRef.current;
+      if (!panStart || event.touches.length !== 1) return;
+
+      const touch = event.touches[0];
+      const dx = touch.clientX - panStart.x;
+      const dy = touch.clientY - panStart.y;
+
+      if (!touchMovedRef.current) {
+        if (Math.hypot(dx, dy) < TOUCH_MOVE_THRESHOLD) return;
+        touchMovedRef.current = true;
+      }
+
       event.preventDefault();
-      const [t1, t2] = Array.from(event.touches);
-      const cx = (t1.clientX + t2.clientX) / 2;
-      const cy = (t1.clientY + t2.clientY) / 2;
-      const distance = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
-      if (distance < 1) return;
-      const ratio = distance / start.distance;
-      const nextScale = Math.min(2, Math.max(0.3, start.scale * ratio));
-      const rect = container.getBoundingClientRect();
-      const pointX = cx - rect.left;
-      const pointY = cy - rect.top;
-      const worldX = (pointX - start.pan.x) / start.scale;
-      const worldY = (pointY - start.pan.y) / start.scale;
-      const nextPan = {
-        x: pointX - worldX * nextScale,
-        y: pointY - worldY * nextScale,
-      };
-      targetScaleRef.current = nextScale;
+      const nextPan = { x: panStart.pan.x + dx, y: panStart.pan.y + dy };
       targetPanRef.current = nextPan;
-      currentScaleRef.current = nextScale;
       currentPanRef.current = nextPan;
-      setScale(nextScale);
       setPan(nextPan);
     };
 
     const onTouchEnd = (event: TouchEvent) => {
+      if (event.touches.length === 0) {
+        pinchStartRef.current = null;
+        touchPanStartRef.current = null;
+        touchMovedRef.current = false;
+        return;
+      }
+
       if (event.touches.length < TOUCH_PINCH_THRESHOLD) {
         pinchStartRef.current = null;
+      }
+
+      if (event.touches.length === 1) {
+        const touch = event.touches[0];
+        touchPanStartRef.current = {
+          x: touch.clientX,
+          y: touch.clientY,
+          pan: { ...targetPanRef.current },
+        };
+        touchMovedRef.current = false;
       }
     };
 
@@ -1875,7 +1932,9 @@ export function FamilyTree({ people, families, children }: Props) {
 
       <div
         ref={containerRef}
-        className="relative h-[65vh] min-h-[440px] select-none overflow-hidden rounded-lg border bg-muted/30"
+        className={`relative h-[65vh] min-h-[440px] select-none overflow-hidden rounded-lg border bg-muted/30 ${
+          isFullscreen ? 'h-screen w-screen rounded-none border-none bg-gradient-to-br from-amber-50 via-orange-50 to-rose-50' : ''
+        }`}
         style={{ cursor: isPanning ? 'grabbing' : 'grab', touchAction: 'none' }}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
