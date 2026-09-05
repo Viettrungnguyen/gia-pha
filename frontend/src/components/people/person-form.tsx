@@ -18,7 +18,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useCreatePerson, useUpdatePerson } from '@/hooks/use-people';
-import { useEnsureFamilyAndAddChild, useTreeData } from '@/hooks/use-families';
+import {
+  useEnsureFamilyAndAddChild,
+  useTreeData,
+  useUpdateChildSortOrder,
+} from '@/hooks/use-families';
 import { ParentCombobox } from '@/components/people/parent-combobox';
 import {
   uploadAvatarFile,
@@ -175,6 +179,7 @@ export function PersonForm({ initial, onSuccess }: PersonFormProps) {
   const createPerson = useCreatePerson();
   const updatePerson = useUpdatePerson();
   const ensureFamilyAndAddChild = useEnsureFamilyAndAddChild();
+  const updateChildSortOrder = useUpdateChildSortOrder();
   const { data: treeData } = useTreeData();
   const [serverError, setServerError] = useState<string | null>(null);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
@@ -187,6 +192,8 @@ export function PersonForm({ initial, onSuccess }: PersonFormProps) {
   const [fatherName, setFatherName] = useState<string>('');
   const [motherId, setMotherId] = useState<string>('');
   const [motherName, setMotherName] = useState<string>('');
+  const [sortOrder, setSortOrder] = useState<string>('');
+  const [sortOrderTouched, setSortOrderTouched] = useState<boolean>(false);
 
   const resolveUniqueSpouse = (
     selectedId: string,
@@ -247,7 +254,33 @@ export function PersonForm({ initial, onSuccess }: PersonFormProps) {
       setMotherId(mother.id);
       setMotherName(mother.display_name);
     }
+    setSortOrder(String(childRow.sort_order ?? 0));
+    setSortOrderTouched(true);
   }, [initial?.id, treeData]);
+
+  // Đề xuất sort_order = max(existing) + 1 trong family (cha, mẹ) hiện tại.
+  // Chỉ gợi ý khi người dùng chưa sửa tay và đang ở chế độ thêm mới.
+  useEffect(() => {
+    if (!treeData) return;
+    if (isEdit) return;
+    if (sortOrderTouched) return;
+    if (!fatherId && !motherId) {
+      setSortOrder('');
+      return;
+    }
+    const siblings = treeData.children.filter((c) => {
+      const f = treeData.families.find((fam) => fam.id === c.family_id);
+      if (!f) return false;
+      const sameFather = fatherId ? f.father_id === fatherId : !f.father_id;
+      const sameMother = motherId ? f.mother_id === motherId : !f.mother_id;
+      return sameFather && sameMother;
+    });
+    const maxOrder = siblings.reduce(
+      (m, c) => Math.max(m, typeof c.sort_order === 'number' ? c.sort_order : 0),
+      -1
+    );
+    setSortOrder(String(maxOrder + 1));
+  }, [fatherId, motherId, treeData, isEdit, sortOrderTouched]);
 
   const {
     register,
@@ -353,6 +386,13 @@ export function PersonForm({ initial, onSuccess }: PersonFormProps) {
         toast.success('Đã thêm thành viên mới');
       }
 
+      const parsedSortOrder = (() => {
+        const raw = sortOrder.trim();
+        if (raw === '') return 0;
+        const n = Number(raw);
+        return Number.isFinite(n) ? Math.trunc(n) : 0;
+      })();
+
       if (fatherId || motherId) {
         if (saved.id === fatherId || saved.id === motherId) {
           throw new Error('Không thể tự làm cha/mẹ của chính mình');
@@ -361,16 +401,44 @@ export function PersonForm({ initial, onSuccess }: PersonFormProps) {
           fatherId: fatherId || null,
           motherId: motherId || null,
           personId: saved.id,
+          sortOrder: parsedSortOrder,
         });
         toast.success(
           `Đã gắn ${saved.display_name} làm con của ${fatherName || '?'}${
             motherName ? ` và ${motherName}` : ''
-          }`
+          } (thứ tự ${parsedSortOrder})`
         );
       } else if (isEdit) {
         // Nếu bỏ trống cả cha và mẹ trong chế độ edit, xóa liên kết cũ
         await removeAllChildrenLinks(saved.id);
         toast.success('Đã xóa liên kết cha mẹ');
+      } else {
+        // Thêm mới nhưng không có cha mẹ: nếu user đã nhập sort_order thì bỏ qua (không có family để gắn vào)
+        if (parsedSortOrder !== 0) {
+          toast.warning('Đã bỏ qua thứ tự con vì chưa chọn cha/mẹ');
+        }
+      }
+
+      // Nếu edit và cha-mẹ không đổi nhưng sort_order đổi → cập nhật riêng
+      if (
+        isEdit &&
+        (fatherId || motherId) &&
+        treeData &&
+        sortOrderTouched
+      ) {
+        const existingChildRow = treeData.children.find(
+          (c) => c.person_id === saved.id
+        );
+        if (
+          existingChildRow &&
+          existingChildRow.sort_order !== parsedSortOrder
+        ) {
+          await updateChildSortOrder.mutateAsync({
+            familyId: existingChildRow.family_id,
+            personId: saved.id,
+            sortOrder: parsedSortOrder,
+          });
+        }
       }
 
       onSuccess();
@@ -381,7 +449,11 @@ export function PersonForm({ initial, onSuccess }: PersonFormProps) {
     }
   };
 
-  const isSaving = createPerson.isPending || updatePerson.isPending || ensureFamilyAndAddChild.isPending;
+  const isSaving =
+    createPerson.isPending ||
+    updatePerson.isPending ||
+    ensureFamilyAndAddChild.isPending ||
+    updateChildSortOrder.isPending;
 
   const fieldError = (key: keyof PersonFormData) =>
     errors[key]?.message ? (
@@ -550,6 +622,28 @@ export function PersonForm({ initial, onSuccess }: PersonFormProps) {
               />
             </div>
           </div>
+          {(fatherId || motherId) && (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div>
+                <label className="text-sm font-medium">
+                  Thứ tự con trong gia đình
+                </label>
+                <Input
+                  type="number"
+                  min={0}
+                  placeholder="VD: 2"
+                  value={sortOrder}
+                  onChange={(e) => {
+                    setSortOrder(e.target.value);
+                    setSortOrderTouched(true);
+                  }}
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Số nhỏ = xếp trước (trưởng). Mặc định: thêm vào cuối.
+                </p>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

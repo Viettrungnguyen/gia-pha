@@ -2,8 +2,8 @@
 project: NguyenDinhHoaNgai
 path: README.md
 type: readme
-version: 1.0.0
-updated: 2026-07-23
+version: 1.1.0
+updated: 2026-09-05
 owner: "@dev-team"
 status: draft
 ---
@@ -16,7 +16,8 @@ Website gia phả điện tử công khai cho dòng họ Nguyễn Đình, làng 
 
 ### Công khai (không cần đăng nhập)
 
-- **Cây gia phả trực quan** - Sơ đồ cây gia đình nhiều đời, kéo/zoom, click để xem chi tiết.
+- **Cây gia phả trực quan** - Sơ đồ cây gia đình nhiều đời, kéo/zoom, click để xem chi tiết. Hỗ trợ sắp xếp thứ tự con (`sort_order`) và nối đường từ ô của người mẹ (vợ) khi nam có nhiều vợ.
+- **Cây gia phả Compact** (`/cay-gia-pha/compact`) - Dạng gộp: ô couple gồm chồng + các vợ xếp dọc, con trai giữ ô riêng, con gái gộp vào 1 ô liệt kê tên.
 - **Danh sách thành viên** - Tìm kiếm theo tên, lọc theo đời/chi, xem hồ sơ đầy đủ.
 - **Lịch cúng lễ** - Lịch tháng + danh sách, ngày âm/dương, sự kiện sắp tới.
 - **Kho tài liệu** - Ảnh lịch sử, giấy tờ, PDF, video lễ hội.

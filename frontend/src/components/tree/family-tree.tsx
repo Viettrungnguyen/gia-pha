@@ -667,7 +667,18 @@ function buildTreeLayout(
   }
 
   for (const familyChildren of childrenByFamily.values()) {
-    familyChildren.sort((a, b) => a.sort_order - b.sort_order);
+    // CV1: sắp xếp theo sort_order, nếu bằng nhau thì tie-break theo birth_year.
+    // Sort_order = 9999 / null được coi là "chưa nhập" → sẽ rơi xuống cuối
+    // (vì những người có sort_order thực sự sẽ có giá trị nhỏ hơn 9999).
+    familyChildren.sort((a, b) => {
+      if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
+      const pa = peopleById.get(a.person_id);
+      const pb = peopleById.get(b.person_id);
+      const ya = pa?.birth_year ?? 9999;
+      const yb = pb?.birth_year ?? 9999;
+      if (ya !== yb) return ya - yb;
+      return a.person_id.localeCompare(b.person_id);
+    });
   }
 
   const familyAnchors = new Map<string, string>();
@@ -1010,12 +1021,24 @@ function buildTreeLayout(
     const parentPosition = anchorPosition ?? spousePosition;
     if (!parentPosition) continue;
 
+    // CV1: đường nối xuống con xuất phát từ ô của MẸ (người có gender=2)
+    // thay vì điểm giữa cặp vợ chồng, để khi nam lấy nhiều vợ thì
+    // con của vợ nào sẽ rõ ràng xuất phát từ ô vợ đó.
+    // Quy tắc ưu tiên:
+    //   1. Nếu mother_id tồn tại và đã được position → dùng tâm ô mother.
+    //   2. Nếu không có mother (chỉ có anchor) → dùng tâm ô anchor.
+    //   3. Nếu chỉ có spouse mà không có anchor → dùng tâm spouse.
+    let motherPosition: { x: number; y: number; width: number; height: number } | undefined;
+    if (family.mother_id) {
+      const mid = personPositions.get(family.mother_id);
+      if (mid) motherPosition = mid;
+    }
+    // Fallback nếu không có mother hoặc mother chưa position: dùng spouse (nếu có)
+    if (!motherPosition && spousePosition) motherPosition = spousePosition;
+    if (!motherPosition) motherPosition = parentPosition;
+
     const familyCenterX =
-      anchorPosition && spousePosition
-        ? (Math.min(anchorPosition.x, spousePosition.x) + (anchorPosition.x <= spousePosition.x ? anchorPosition.width : spousePosition.width) +
-            Math.max(anchorPosition.x, spousePosition.x)) /
-          2
-        : parentPosition.x + parentPosition.width / 2;
+      motherPosition.x + motherPosition.width / 2;
 
     for (const child of childrenByFamily.get(family.id) ?? []) {
       const childPosition = personPositions.get(child.person_id);

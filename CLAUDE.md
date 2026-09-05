@@ -45,6 +45,7 @@ nguyen-dinh-hoa-ngai/
 │   │   │   ├── (public)/
 │   │   │   │   ├── layout.tsx    # Header + Footer
 │   │   │   │   ├── cay-gia-pha/page.tsx
+│   │   │   │   ├── cay-gia-pha/compact/page.tsx  # View gộp vợ chồng + ô con gái
 │   │   │   │   ├── thanh-vien/page.tsx
 │   │   │   │   ├── thanh-vien/[id]/page.tsx
 │   │   │   │   ├── thanh-vien/people-list-client.tsx
@@ -57,6 +58,7 @@ nguyen-dinh-hoa-ngai/
 │   │   │       ├── layout.tsx    # Sidebar admin
 │   │   │       ├── page.tsx      # Dashboard
 │   │   │       ├── thanh-vien/page.tsx
+│   │   │       ├── thu-tu-con/page.tsx   # Placeholder: sắp xếp thứ tự con
 │   │   │       ├── lich-cung-le/page.tsx
 │   │   │       └── tai-lieu/page.tsx
 │   │   ├── components/
@@ -69,7 +71,8 @@ nguyen-dinh-hoa-ngai/
 │   │   │   │   ├── auth-provider.tsx
 │   │   │   │   └── login-form.tsx
 │   │   │   ├── tree/
-│   │   │   │   ├── family-tree.tsx       # SVG tree layout
+│   │   │   │   ├── family-tree.tsx         # SVG tree layout (CV1: sort_order, nối từ ô mẹ)
+│   │   │   │   ├── compact-family-tree.tsx # CV2: view gộp vợ chồng + ô con gái
 │   │   │   │   └── tree-canvas.tsx
 │   │   │   └── people/
 │   │   │       ├── person-card.tsx

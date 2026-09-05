@@ -2,8 +2,8 @@
 project: NguyenDinhHoaNgai
 path: docs/04-build/LOCAL-DEVELOPMENT.md
 type: dev-guide
-version: 1.1.0
-updated: 2026-07-23
+version: 1.2.0
+updated: 2026-09-05
 owner: "@dev-team"
 status: approved
 ---
@@ -267,10 +267,28 @@ git push origin feature/my-feature
 | `pnpm install` warning sharp | Chạy `pnpm config set onlyBuiltDependencies '["sharp","unrs-resolver"]'` rồi `pnpm install` lại |
 | Port 3000 bận | `pnpm dev -- -p 4000` |
 
-## 10. Liên kết
+## 10. Fake data cho development (không cần Supabase)
+
+Nếu muốn phát triển nhanh không cần kết nối Supabase, file
+`src/lib/dev-fake-tree.ts` và `src/lib/dev-fake-compact-tree.ts` sinh dữ liệu
+giả trong bộ nhớ. Bật bằng cách thêm 1 trong 2 biến vào `frontend/.env.local`:
+
+```bash
+NEXT_PUBLIC_USE_FAKE_TREE=1        # ~500 người 11 đời (cây lớn)
+NEXT_PUBLIC_USE_FAKE_TREE=compact  # mini test ~14 người, có multi-wife + sort_order hỗn hợp
+```
+
+Trong chế độ `compact`, có 1 ông có 2 vợ, mỗi vợ có 2-3 con, và đặc biệt 1
+con **không có `sort_order`** (NULLS LAST) để kiểm tra hiển thị thứ tự đúng.
+
+Sau đó chạy `pnpm dev` rồi mở `http://localhost:4000/cay-gia-pha` hoặc
+`/cay-gia-pha/compact`.
+
+## 11. Liên kết
 
 - [IMPLEMENTATION-PLAN.md](IMPLEMENTATION-PLAN.md) — Sprint breakdown
 - [VERCEL-SUPABASE-DEPLOY.md](VERCEL-SUPABASE-DEPLOY.md) — Triển khai production
+- [FEATURE-COMPACT-TREE-AND-CHILD-ORDER.md](FEATURE-COMPACT-TREE-AND-CHILD-ORDER.md) — CV1 + CV2 spec
 - [prompts/01-scaffold-frontend.md](../../prompts/01-scaffold-frontend.md) — Hướng dẫn scaffold
 - [Supabase Docs](https://supabase.com/docs) — Auth, RLS, Storage
 - [Next.js Docs](https://nextjs.org/docs) — App Router, Middleware

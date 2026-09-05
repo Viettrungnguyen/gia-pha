@@ -2,10 +2,10 @@
 project: NguyenDinhHoaNgai
 path: docs/02-design/UI-UX-DESIGN.md
 type: ui-ux
-version: 1.0.0
-updated: 2026-07-23
+version: 1.1.0
+updated: 2026-09-05
 owner: "@dev-team"
-status: draft
+status: approved
 ---
 
 # UI/UX Design
@@ -173,9 +173,36 @@ xl: 1280px  /* Desktop */
 
 ### 4.2 Cây gia phả (`/cay-gia-pha`)
 
-- Header: title + nút chuyển chế độ (Cây / Danh sách).
+- Header: title + nút chuyển chế độ (Cây / Danh sách / Compact).
 - Nếu chế độ cây: full-width canvas (SVG), controls góc dưới phải (zoom in/out, fit).
 - Nếu chế độ danh sách: table theo đời, mỗi đời là một section.
+- **Compact (`/cay-gia-pha/compact`):** view gộp, hiển thị mỗi couple là 1 ô
+  (chồng + các vợ xếp dọc), con trai ô riêng, con gái gộp ô liệt kê tên.
+  Phù hợp in ấn / xem nhanh tổng quan.
+
+### 4.2.1 Cây gia phả Compact (`/cay-gia-pha/compact`)
+
+```
+┌──────────────────────────────────────────┐
+│  ┌──────────────────────────────────┐    │
+│  │ NGÔ - ÔNG A           (Đời 1)  │    │ ← Header tên chồng
+│  │ ───────────────                   │    │
+│  │ Vợ 1: Bà B                       │    │ ← Vợ xếp dọc
+│  │ Vợ 2: Bà C                       │    │
+│  └────────┬─────────────────────────┘    │
+│           │                              │
+│   ┌───────┼───────┬──────────────┐       │
+│   ▼       ▼       ▼              ▼       │
+│ ┌─────┐┌─────┐┌──────────────────┐     │
+│ │Con X││Con Y││ Con gái (2)       │     │ ← Con trai ô riêng,
+│ │Đời 2││Đời 2││ • Ng G (1980)    │     │ ← con gái gộp pill
+│ └─────┘└─────┘│ • Ng H (1983)    │     │
+│               └──────────────────┘     │
+└──────────────────────────────────────────┘
+```
+
+**Mục đích**: nhìn tổng quan nhanh, in ấn được, tiết kiệm không gian khi
+nhiều con gái.
 
 ### 4.3 Danh sách thành viên (`/thanh-vien`)
 

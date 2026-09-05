@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useTreeData } from '@/hooks/use-families';
 import { TreeFallbackList } from '@/components/tree/tree-fallback-list';
@@ -59,6 +60,11 @@ export default function CayGiaPhaPage() {
             onClick={() => setMode('list')}
           >
             <List className="mr-1 h-4 w-4" /> Danh sách
+          </Button>
+          <Button asChild variant="ghost" size="sm" aria-label="Cây compact">
+            <Link href="/cay-gia-pha/compact">
+              <GitBranchPlus className="mr-1 h-4 w-4" /> Compact
+            </Link>
           </Button>
         </div>
       </div>

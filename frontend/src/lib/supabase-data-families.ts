@@ -16,15 +16,20 @@ export interface TreeData {
 }
 
 export async function getTreeData(): Promise<TreeData> {
-  // Dev-only fake tree (Local): bật bằng NEXT_PUBLIC_USE_FAKE_TREE=1 trong .env.local.
+  // Dev-only fake tree (Local): bật bằng NEXT_PUBLIC_USE_FAKE_TREE trong .env.local.
+  //  'compact' → mini tree test cho cây compact (CV2)
+  //  '1'      → big tree ~500 người (kiểm thử cây lớn)
   // Cờ NODE_ENV đảm bảo production build của Vercel không bao giờ gọi fake data,
   // ngay cả khi env lỡ bị set.
-  if (
-    process.env.NODE_ENV !== 'production' &&
-    process.env.NEXT_PUBLIC_USE_FAKE_TREE === '1'
-  ) {
-    const { generateFakeTree } = await import('@/lib/dev-fake-tree');
-    return generateFakeTree();
+  if (process.env.NODE_ENV !== 'production') {
+    if (process.env.NEXT_PUBLIC_USE_FAKE_TREE === 'compact') {
+      const { generateCompactFakeTree } = await import('@/lib/dev-fake-compact-tree');
+      return generateCompactFakeTree();
+    }
+    if (process.env.NEXT_PUBLIC_USE_FAKE_TREE === '1') {
+      const { generateFakeTree } = await import('@/lib/dev-fake-tree');
+      return generateFakeTree();
+    }
   }
   const supabase = getSupabaseBrowserClient();
   const { data: authData } = await supabase.auth.getUser();
@@ -140,3 +145,22 @@ export async function deleteFamily(id: string): Promise<void> {
   const { error } = await supabase.from('families').delete().eq('id', id);
   if (error) throw error;
 }
+
+/**
+ * Cập nhật sort_order cho 1 liên kết cha-mẹ-con hiện có.
+ * Dùng khi admin đổi thứ tự con trong gia đình qua PersonForm.
+ */
+export async function updateChildSortOrder(
+  familyId: string,
+  personId: string,
+  sortOrder: number
+): Promise<void> {
+  const supabase = getSupabaseBrowserClient();
+  const { error } = await supabase
+    .from('children')
+    .update({ sort_order: sortOrder })
+    .eq('family_id', familyId)
+    .eq('person_id', personId);
+  if (error) throw error;
+}
+

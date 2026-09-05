@@ -2,10 +2,10 @@
 project: NguyenDinhHoaNgai
 path: docs/02-design/DATA-MODEL.md
 type: data-model
-version: 1.0.0
-updated: 2026-07-23
+version: 1.1.0
+updated: 2026-09-05
 owner: "@dev-team"
-status: draft
+status: approved
 ---
 
 # Data Model
@@ -239,7 +239,7 @@ CREATE TABLE children (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   family_id   UUID NOT NULL REFERENCES families(id) ON DELETE CASCADE,
   person_id   UUID NOT NULL REFERENCES people(id) ON DELETE CASCADE,
-  sort_order  INTEGER DEFAULT 0, -- Thứ tự sinh
+  sort_order  INTEGER DEFAULT 0, -- Thứ tự sinh (NULLS LAST)
   created_at  TIMESTAMPTZ DEFAULT NOW(),
 
   UNIQUE(family_id, person_id)
@@ -248,6 +248,12 @@ CREATE TABLE children (
 CREATE INDEX idx_children_family ON children(family_id);
 CREATE INDEX idx_children_person ON children(person_id);
 ```
+
+> **Quy ước sort_order (2026-09):** Thứ tự hiển thị con trong cây gia phả sắp theo
+> `sort_order` tăng dần. Con có `sort_order = NULL` (hoặc 9999) sẽ xuất hiện CUỐI
+> theo thứ tự nhập. Tie-break: `birth_year` → `id`. Khi nam lấy nhiều vợ, đường
+> nối xuống con xuất phát từ ô của vợ (mẹ) tương ứng. Xem:
+> [`FEATURE-COMPACT-TREE-AND-CHILD-ORDER.md`](../04-build/FEATURE-COMPACT-TREE-AND-CHILD-ORDER.md)
 
 ### 3.5 `events`
 

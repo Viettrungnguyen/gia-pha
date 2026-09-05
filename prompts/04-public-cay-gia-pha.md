@@ -2,8 +2,8 @@
 project: NguyenDinhHoaNgai
 path: prompts/04-public-cay-gia-pha.md
 type: prompt
-version: 1.0.0
-updated: 2026-07-23
+version: 1.1.0
+updated: 2026-09-05
 ---
 
 # 04 - Public Cây Gia Phả
@@ -782,3 +782,25 @@ Verify:
 - [05-public-thanh-vien.md](05-public-thanh-vien.md) - Tiếp theo.
 - [TECHNICAL-DESIGN.md §3](../docs/02-design/TECHNICAL-DESIGN.md) - Cấu trúc component.
 - [SITEMAP-USER-FLOWS.md §4.1](../docs/02-design/SITEMAP-USER-FLOWS.md) - User flow.
+
+## 9. Mở rộng (2026-09)
+
+### 9.1 Sort_order hiển thị đúng (CV1)
+
+Tháng 9/2026 thêm: con trong 1 family được sort theo `children.sort_order`, NULLS LAST
+(tức con chưa nhập xếp cuối). Tie-break bằng `birth_year` rồi `id`.
+
+Đường nối cha-mẹ-con giờ xuất phát từ **ô của người mẹ (gender=2)** nếu có,
+fallback sang ô vợ chồng. Mục đích: nam lấy nhiều vợ → con của vợ nào hiển thị
+nối từ ô vợ đó, rõ ràng hơn.
+
+### 9.2 Cây Compact (CV2)
+
+Thêm route `/cay-gia-pha/compact` với view gộp (`compact-family-tree.tsx`).
+
+Đặc điểm:
+- Ô couple (màu cam đậm) = chồng + các vợ xếp dọc.
+- Con trai giữ ô riêng.
+- Con gái gộp vào ô pill (viền hồng đứt) liệt kê tên + năm sinh.
+
+Xem chi tiết: [`../docs/04-build/FEATURE-COMPACT-TREE-AND-CHILD-ORDER.md`](../docs/04-build/FEATURE-COMPACT-TREE-AND-CHILD-ORDER.md)

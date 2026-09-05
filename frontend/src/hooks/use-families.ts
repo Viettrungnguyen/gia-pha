@@ -16,6 +16,7 @@ import {
   deleteFamily,
   ensureFamilyAndAddChild,
   removeAllChildrenLinks,
+  updateChildSortOrder,
   type TreeData,
   type CreateFamilyInput,
 } from '@/lib/supabase-data-families';
@@ -85,6 +86,22 @@ export function useDeleteFamily() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: deleteFamily,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['tree-data'] }),
+  });
+}
+
+export function useUpdateChildSortOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      familyId,
+      personId,
+      sortOrder,
+    }: {
+      familyId: string;
+      personId: string;
+      sortOrder: number;
+    }) => updateChildSortOrder(familyId, personId, sortOrder),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['tree-data'] }),
   });
 }
