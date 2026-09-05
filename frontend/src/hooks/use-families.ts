@@ -18,6 +18,7 @@ import {
   removeAllChildrenLinks,
   updateChildSortOrder,
   updateFamilySortOrder,
+  swapFamilySortOrder,
   type TreeData,
   type CreateFamilyInput,
 } from '@/lib/supabase-data-families';
@@ -112,6 +113,15 @@ export function useUpdateFamilySortOrder() {
   return useMutation({
     mutationFn: ({ familyId, sortOrder }: { familyId: string; sortOrder: number }) =>
       updateFamilySortOrder(familyId, sortOrder),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['tree-data'] }),
+  });
+}
+
+export function useSwapFamilySortOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ familyAId, familyBId }: { familyAId: string; familyBId: string }) =>
+      swapFamilySortOrder(familyAId, familyBId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['tree-data'] }),
   });
 }

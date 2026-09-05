@@ -1,15 +1,17 @@
 /**
  * @project NguyenDinhHoaNgai
  * @file src/components/people/spouse-manager-dialog.tsx
- * @description Manage multiple spouse relationships for a person
- * @version 1.0.0
- * @updated 2026-07-24
+ * @description Manage multiple spouse relationships for a person.
+ *              - Thêm vợ/chồng mới kèm ô nhập số thứ tự (1..N).
+ *              - Sửa thứ tự trực tiếp bằng ô input thay cho nút lên/xuống.
+ * @version 1.1.0
+ * @updated 2026-09-05
  */
 
 'use client';
 
 import { useMemo, useState } from 'react';
-import { ArrowDown, ArrowUp, Loader2, Plus, Trash2, Users } from 'lucide-react';
+import { Loader2, Plus, Trash2, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { ParentCombobox } from '@/components/people/parent-combobox';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -21,10 +23,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
   useCreateFamily,
   useDeleteFamily,
+  useSwapFamilySortOrder,
   useTreeData,
   useUpdateFamilySortOrder,
 } from '@/hooks/use-families';
@@ -42,17 +46,11 @@ interface SpouseRelationship {
   childCount: number;
 }
 
-function getSpouseLabel(person: Person | null, spouses: SpouseRelationship[]): string {
+function getSpouseBaseLabel(person: Person | null): string {
   if (!person) return 'Quan hệ';
-  if (spouses.length <= 1) {
-    if (person.gender === 1) return 'Vợ';
-    if (person.gender === 2) return 'Chồng';
-    return 'Quan hệ';
-  }
-  const base = person.gender === 1 ? 'Vợ' : person.gender === 2 ? 'Chồng' : 'Quan hệ';
-  // Index tính theo vị trí sau khi sort (đã sort ở useMemo).
-  // Caller truyền index qua prop.
-  return base;
+  if (person.gender === 1) return 'Vợ';
+  if (person.gender === 2) return 'Chồng';
+  return 'Quan hệ';
 }
 
 export function SpouseManagerDialog({ person, open, onOpenChange }: Props) {
@@ -60,8 +58,13 @@ export function SpouseManagerDialog({ person, open, onOpenChange }: Props) {
   const createFamily = useCreateFamily();
   const deleteFamily = useDeleteFamily();
   const updateFamilySortOrder = useUpdateFamilySortOrder();
+  // Hook còn giữ để dùng ở nơi khác; trong dialog này đã bỏ nút lên/xuống.
+  useSwapFamilySortOrder();
+
   const [spouseId, setSpouseId] = useState('');
   const [spouseName, setSpouseName] = useState('');
+  // Thứ tự vợ/chồng mới: mặc định = số hiện tại + 1.
+  const [newSortOrder, setNewSortOrder] = useState<string>('');
 
   const relationships = useMemo<SpouseRelationship[]>(() => {
     if (!person || !data) return [];
@@ -79,6 +82,8 @@ export function SpouseManagerDialog({ person, open, onOpenChange }: Props) {
       })
       .sort((first, second) => first.family.sort_order - second.family.sort_order);
   }, [data, person]);
+
+  const baseLabel = getSpouseBaseLabel(person);
 
   const handleAdd = async () => {
     if (!person || !spouseId) return;
@@ -105,16 +110,40 @@ export function SpouseManagerDialog({ person, open, onOpenChange }: Props) {
       return;
     }
 
+    // Mặc định thứ tự = relationships.length + 1 nếu người dùng không nhập.
+    const parsedOrder = newSortOrder.trim() === '' ? null : Number.parseInt(newSortOrder, 10);
+    let sortOrder: number;
+    if (parsedOrder === null || Number.isNaN(parsedOrder)) {
+      const maxOrder = relationships.reduce(
+        (acc, relationship) => Math.max(acc, relationship.family.sort_order),
+        0,
+      );
+      sortOrder = maxOrder + 1;
+    } else {
+      if (parsedOrder < 1) {
+        toast.error('Thứ tự vợ/chồng phải là số nguyên dương (bắt đầu từ 1)');
+        return;
+      }
+      sortOrder = parsedOrder;
+      if (relationships.some((relationship) => relationship.family.sort_order === sortOrder)) {
+        toast.warning(
+          `Đã có quan hệ ở vị trí ${sortOrder}. Khi hiển thị cây các quan hệ cùng số sẽ được phụ thuộc thêm ngày tạo.`,
+        );
+      }
+    }
+
     try {
       await createFamily.mutateAsync({
         father_id: man.id,
         mother_id: woman.id,
+        sort_order: sortOrder,
       });
       setSpouseId('');
       setSpouseName('');
+      setNewSortOrder('');
       toast.success(`Đã thêm quan hệ với ${selectedSpouse.display_name}`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Không thể thêm quan hệ vợ chồng');
+      toast.error(error instanceof Error ? error.message : 'Không thể thêm quan hệ vợ/chồng');
     }
   };
 
@@ -122,34 +151,28 @@ export function SpouseManagerDialog({ person, open, onOpenChange }: Props) {
     if (relationship.childCount > 0) return;
     try {
       await deleteFamily.mutateAsync(relationship.family.id);
-      toast.success('Đã xóa quan hệ vợ chồng');
+      toast.success('Đã xóa quan hệ vợ/chồng');
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Không thể xóa quan hệ vợ chồng');
+      toast.error(error instanceof Error ? error.message : 'Không thể xóa quan hệ vợ/chồng');
     }
   };
 
-  // Đổi chỗ sort_order giữa phần tử tại `index` và phần tử kề.
-  // Dùng mảng tạm để không phụ thuộc React Query cache cập nhật xong.
-  const handleSwap = async (index: number, direction: -1 | 1) => {
-    const target = index + direction;
-    if (target < 0 || target >= relationships.length) return;
-    const a = relationships[index];
-    const b = relationships[target];
+  // Cập nhật trực tiếp sort_order từ ô input. Tránh gọi nhiều lần liên tục
+  // bằng cách chỉ ghi khi giá trị thay đổi so với DB.
+  const handleSortOrderChange = async (relationship: SpouseRelationship, raw: string) => {
+    const parsed = Number.parseInt(raw, 10);
+    if (Number.isNaN(parsed) || parsed < 1) {
+      toast.error('Thứ tự phải là số nguyên dương');
+      return;
+    }
+    if (parsed === relationship.family.sort_order) return;
     try {
-      await Promise.all([
-        updateFamilySortOrder.mutateAsync({
-          familyId: a.family.id,
-          sortOrder: b.family.sort_order,
-        }),
-        updateFamilySortOrder.mutateAsync({
-          familyId: b.family.id,
-          sortOrder: a.family.sort_order,
-        }),
-      ]);
+      await updateFamilySortOrder.mutateAsync({
+        familyId: relationship.family.id,
+        sortOrder: parsed,
+      });
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : 'Không thể đổi thứ tự vợ/chồng'
-      );
+      toast.error(error instanceof Error ? error.message : 'Không thể cập nhật thứ tự');
     }
   };
 
@@ -171,16 +194,32 @@ export function SpouseManagerDialog({ person, open, onOpenChange }: Props) {
           <div className="space-y-5">
             <div className="space-y-3">
               <Label>Thêm vợ/chồng</Label>
-              <ParentCombobox
-                selectedId={spouseId || undefined}
-                selectedName={spouseName}
-                onSelect={(id, name) => {
-                  setSpouseId(id);
-                  setSpouseName(name);
-                }}
-                placeholder="Tìm thành viên để ghép đôi..."
-              />
-              <Button type="button" onClick={handleAdd} disabled={!spouseId || createFamily.isPending}>
+              <div className="grid grid-cols-[1fr_120px] gap-2">
+                <ParentCombobox
+                  selectedId={spouseId || undefined}
+                  selectedName={spouseName}
+                  onSelect={(id, name) => {
+                    setSpouseId(id);
+                    setSpouseName(name);
+                  }}
+                  placeholder="Tìm thành viên để ghép đôi..."
+                />
+                <Input
+                  type="number"
+                  min={1}
+                  inputMode="numeric"
+                  value={newSortOrder}
+                  onChange={(event) => setNewSortOrder(event.target.value)}
+                  placeholder={`${relationships.length + 1}`}
+                  aria-label="Thứ tự vợ/chồng"
+                  title="Thứ tự hiển thị (1 = đầu tiên). Để trống sẽ tự đặt vào cuối."
+                />
+              </div>
+              <Button
+                type="button"
+                onClick={handleAdd}
+                disabled={!spouseId || createFamily.isPending}
+              >
                 {createFamily.isPending ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
@@ -201,18 +240,42 @@ export function SpouseManagerDialog({ person, open, onOpenChange }: Props) {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {relationships.map((relationship, index) => {
-                    const base = getSpouseLabel(person, relationships);
+                  {relationships.map((relationship) => {
+                    const order = relationship.family.sort_order;
                     const label =
-                      relationships.length === 1
-                        ? base
-                        : `${base} ${index + 1}`;
+                      relationships.length === 1 ? baseLabel : `${baseLabel} ${order}`;
                     return (
                       <div
                         key={relationship.family.id}
-                        className="flex items-center justify-between gap-3 rounded-md border p-3"
+                        className="flex items-center gap-3 rounded-md border p-3"
                       >
-                        <div className="min-w-0">
+                        <div className="flex shrink-0 flex-col items-center gap-1">
+                          <Label
+                            htmlFor={`sort-${relationship.family.id}`}
+                            className="text-xs text-muted-foreground"
+                          >
+                            STT
+                          </Label>
+                          <Input
+                            id={`sort-${relationship.family.id}`}
+                            type="number"
+                            min={1}
+                            inputMode="numeric"
+                            defaultValue={order}
+                            onBlur={(event) =>
+                              handleSortOrderChange(relationship, event.target.value)
+                            }
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter') {
+                                event.currentTarget.blur();
+                              }
+                            }}
+                            disabled={updateFamilySortOrder.isPending}
+                            className="h-9 w-16 text-center"
+                            aria-label={`Thứ tự của ${relationship.spouse?.display_name ?? 'quan hệ'}`}
+                          />
+                        </div>
+                        <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-medium">
                             {label}:{' '}
                             <span className="text-foreground">
@@ -229,33 +292,6 @@ export function SpouseManagerDialog({ person, open, onOpenChange }: Props) {
                             variant="ghost"
                             size="icon"
                             disabled={
-                              index === 0 || updateFamilySortOrder.isPending
-                            }
-                            onClick={() => handleSwap(index, -1)}
-                            aria-label="Đưa lên trên"
-                            title="Đưa lên trên"
-                          >
-                            <ArrowUp className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            disabled={
-                              index === relationships.length - 1 ||
-                              updateFamilySortOrder.isPending
-                            }
-                            onClick={() => handleSwap(index, 1)}
-                            aria-label="Đưa xuống dưới"
-                            title="Đưa xuống dưới"
-                          >
-                            <ArrowDown className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            disabled={
                               relationship.childCount > 0 || deleteFamily.isPending
                             }
                             onClick={() => handleDelete(relationship)}
@@ -263,7 +299,7 @@ export function SpouseManagerDialog({ person, open, onOpenChange }: Props) {
                             title={
                               relationship.childCount > 0
                                 ? 'Cần chuyển hoặc xóa quan hệ con trước'
-                                : 'Xóa quan hệ vợ chồng'
+                                : 'Xóa quan hệ vợ/chồng'
                             }
                           >
                             <Trash2 className="h-4 w-4 text-destructive" />

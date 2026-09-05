@@ -57,6 +57,7 @@ export interface CreateFamilyInput {
   marriage_date?: string | null;
   marriage_place?: string | null;
   notes?: string | null;
+  sort_order?: number;
 }
 
 export async function createFamily(input: CreateFamilyInput): Promise<Family> {
@@ -161,6 +162,21 @@ export async function updateChildSortOrder(
     .update({ sort_order: sortOrder })
     .eq('family_id', familyId)
     .eq('person_id', personId);
+  if (error) throw error;
+}
+
+/**
+ * Hoán đổi sort_order giữa 2 family (cặp vợ chồng) một cách atomic.
+ * Dùng RPC swap_family_sort_order ở backend để tránh race condition
+ * và xử lý an toàn khi cả hai cùng sort_order (vd. cùng = 0).
+ */
+export async function swapFamilySortOrder(familyAId: string, familyBId: string): Promise<void> {
+  if (familyAId === familyBId) return;
+  const supabase = getSupabaseBrowserClient();
+  const { error } = await supabase.rpc('swap_family_sort_order', {
+    a: familyAId,
+    b: familyBId,
+  });
   if (error) throw error;
 }
 

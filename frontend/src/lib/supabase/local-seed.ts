@@ -401,7 +401,7 @@ const f_to = mkF('f_d1', { father_id: to_vo.id, mother_id: to_vo_wife.id, marria
 
 // Chi 1
 const f_d2_c1 = mkF('f_d2_c1', { father_id: d2_c1_cha.id, mother_id: d2_c1_vo1.id, marriage_date: '1938-05-20', marriage_place: 'Hà Nội', sort_order: 1 });
-const f_d2_c1_v2 = mkF('f_d2_c1_v2', { father_id: d2_c1_cha.id, mother_id: d2_c1_vo2.id, marriage_date: '1970-03-18', marriage_place: 'Hà Nội', sort_order: 2, notes: 'Vợ thứ hai' });
+const f_d2_c1_v2 = mkF('f_d2_c1_v2', { father_id: d2_c1_cha.id, mother_id: d2_c1_vo2.id, marriage_date: '1970-03-18', marriage_place: 'Hà Nội', sort_order: 99, notes: 'Vợ thứ hai (sort_order=99 để test thứ tự rõ ràng)' });
 const f_d3_c1_1 = mkF('f_d3_c1_1', { father_id: d3_c1_1.id, mother_id: d3_c1_1_vo.id, marriage_date: '1968-10-25', marriage_place: 'Hà Nội' });
 const f_d3_c1_2 = mkF('f_d3_c1_2', { father_id: d3_c1_2_chong.id, mother_id: d3_c1_2.id, marriage_date: '1970-02-14', marriage_place: 'Hà Nội' });
 const f_d3_c1_3 = mkF('f_d3_c1_3', { father_id: d3_c1_3.id, mother_id: d3_c1_3_vo.id, marriage_date: '1975-08-15', marriage_place: 'Hà Nội' });
