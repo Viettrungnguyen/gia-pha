@@ -164,3 +164,19 @@ export async function updateChildSortOrder(
   if (error) throw error;
 }
 
+/**
+ * Cập nhật sort_order cho 1 family (cặp vợ chồng).
+ * Dùng khi admin đổi thứ tự vợ/chồng qua SpouseManagerDialog.
+ */
+export async function updateFamilySortOrder(
+  familyId: string,
+  sortOrder: number
+): Promise<void> {
+  const supabase = getSupabaseBrowserClient();
+  const { error } = await supabase
+    .from('families')
+    .update({ sort_order: sortOrder })
+    .eq('id', familyId);
+  if (error) throw error;
+}
+

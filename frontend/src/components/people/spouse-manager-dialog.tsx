@@ -9,7 +9,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Loader2, Plus, Trash2, Users } from 'lucide-react';
+import { ArrowDown, ArrowUp, Loader2, Plus, Trash2, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { ParentCombobox } from '@/components/people/parent-combobox';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -22,7 +22,12 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { useCreateFamily, useDeleteFamily, useTreeData } from '@/hooks/use-families';
+import {
+  useCreateFamily,
+  useDeleteFamily,
+  useTreeData,
+  useUpdateFamilySortOrder,
+} from '@/hooks/use-families';
 import type { Family, Person } from '@/types';
 
 interface Props {
@@ -37,10 +42,24 @@ interface SpouseRelationship {
   childCount: number;
 }
 
+function getSpouseLabel(person: Person | null, spouses: SpouseRelationship[]): string {
+  if (!person) return 'Quan hệ';
+  if (spouses.length <= 1) {
+    if (person.gender === 1) return 'Vợ';
+    if (person.gender === 2) return 'Chồng';
+    return 'Quan hệ';
+  }
+  const base = person.gender === 1 ? 'Vợ' : person.gender === 2 ? 'Chồng' : 'Quan hệ';
+  // Index tính theo vị trí sau khi sort (đã sort ở useMemo).
+  // Caller truyền index qua prop.
+  return base;
+}
+
 export function SpouseManagerDialog({ person, open, onOpenChange }: Props) {
   const { data, isLoading } = useTreeData();
   const createFamily = useCreateFamily();
   const deleteFamily = useDeleteFamily();
+  const updateFamilySortOrder = useUpdateFamilySortOrder();
   const [spouseId, setSpouseId] = useState('');
   const [spouseName, setSpouseName] = useState('');
 
@@ -109,6 +128,31 @@ export function SpouseManagerDialog({ person, open, onOpenChange }: Props) {
     }
   };
 
+  // Đổi chỗ sort_order giữa phần tử tại `index` và phần tử kề.
+  // Dùng mảng tạm để không phụ thuộc React Query cache cập nhật xong.
+  const handleSwap = async (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= relationships.length) return;
+    const a = relationships[index];
+    const b = relationships[target];
+    try {
+      await Promise.all([
+        updateFamilySortOrder.mutateAsync({
+          familyId: a.family.id,
+          sortOrder: b.family.sort_order,
+        }),
+        updateFamilySortOrder.mutateAsync({
+          familyId: b.family.id,
+          sortOrder: a.family.sort_order,
+        }),
+      ]);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : 'Không thể đổi thứ tự vợ/chồng'
+      );
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
@@ -157,36 +201,77 @@ export function SpouseManagerDialog({ person, open, onOpenChange }: Props) {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {relationships.map((relationship, index) => (
-                    <div
-                      key={relationship.family.id}
-                      className="flex items-center justify-between gap-3 rounded-md border p-3"
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">
-                          {index + 1}. {relationship.spouse?.display_name ?? 'Chưa rõ thông tin'}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {relationship.childCount} người con trong gia đình này
-                        </p>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        disabled={relationship.childCount > 0 || deleteFamily.isPending}
-                        onClick={() => handleDelete(relationship)}
-                        aria-label={`Xóa quan hệ với ${relationship.spouse?.display_name ?? 'người này'}`}
-                        title={
-                          relationship.childCount > 0
-                            ? 'Cần chuyển hoặc xóa quan hệ con trước'
-                            : 'Xóa quan hệ vợ chồng'
-                        }
+                  {relationships.map((relationship, index) => {
+                    const base = getSpouseLabel(person, relationships);
+                    const label =
+                      relationships.length === 1
+                        ? base
+                        : `${base} ${index + 1}`;
+                    return (
+                      <div
+                        key={relationship.family.id}
+                        className="flex items-center justify-between gap-3 rounded-md border p-3"
                       >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </div>
-                  ))}
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">
+                            {label}:{' '}
+                            <span className="text-foreground">
+                              {relationship.spouse?.display_name ?? 'Chưa rõ thông tin'}
+                            </span>
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {relationship.childCount} người con trong gia đình này
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            disabled={
+                              index === 0 || updateFamilySortOrder.isPending
+                            }
+                            onClick={() => handleSwap(index, -1)}
+                            aria-label="Đưa lên trên"
+                            title="Đưa lên trên"
+                          >
+                            <ArrowUp className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            disabled={
+                              index === relationships.length - 1 ||
+                              updateFamilySortOrder.isPending
+                            }
+                            onClick={() => handleSwap(index, 1)}
+                            aria-label="Đưa xuống dưới"
+                            title="Đưa xuống dưới"
+                          >
+                            <ArrowDown className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            disabled={
+                              relationship.childCount > 0 || deleteFamily.isPending
+                            }
+                            onClick={() => handleDelete(relationship)}
+                            aria-label={`Xóa quan hệ với ${relationship.spouse?.display_name ?? 'người này'}`}
+                            title={
+                              relationship.childCount > 0
+                                ? 'Cần chuyển hoặc xóa quan hệ con trước'
+                                : 'Xóa quan hệ vợ chồng'
+                            }
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

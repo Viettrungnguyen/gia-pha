@@ -14,6 +14,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { toast } from 'sonner';
 import {
   ChevronsDownUp,
   Download,
@@ -1060,6 +1061,21 @@ export function CompactFamilyTree({ people, families, children }: Props) {
     setIsExporting(true);
     try {
       const svgString = serializeCompactLayoutToSvg(layout);
+
+      // Giới hạn canvas của trình duyệt:
+      //  - Chrome/Edge: width/height tối đa 32767, area tối đa ~268MP.
+      //  - Firefox: tối đa 32767 mỗi chiều, area 472907776.
+      // Khi vượt, canvas.toBlob() sẽ trả về null → "Xuất PNG thất bại".
+      // Ta giảm scale hoặc tile theo trục để luôn nằm trong giới hạn.
+      const MAX_DIM = 8192; // an toàn cho mọi trình duyệt kể cả mobile
+      const REQUESTED_SCALE = 2;
+
+      const targetWidth = layout.width * REQUESTED_SCALE;
+      const targetHeight = layout.height * REQUESTED_SCALE;
+      const scale = Math.min(REQUESTED_SCALE, MAX_DIM / layout.width, MAX_DIM / layout.height);
+      const finalW = Math.floor(layout.width * scale);
+      const finalH = Math.floor(layout.height * scale);
+
       const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
       const svgUrl = URL.createObjectURL(svgBlob);
 
@@ -1070,22 +1086,61 @@ export function CompactFamilyTree({ people, families, children }: Props) {
         img.onerror = () => reject(new Error('Không thể render SVG'));
         img.src = svgUrl;
       });
+      URL.revokeObjectURL(svgUrl);
 
-      const scale = 2; // xuất 2x để ảnh nét hơn
+      // Vẽ SVG lên canvas đúng cỡ mong muốn (đã kẹp scale).
       const canvas = document.createElement('canvas');
-      canvas.width = layout.width * scale;
-      canvas.height = layout.height * scale;
+      canvas.width = finalW;
+      canvas.height = finalH;
       const ctx = canvas.getContext('2d');
       if (!ctx) throw new Error('Canvas không khả dụng');
       ctx.fillStyle = '#fff7ed';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      URL.revokeObjectURL(svgUrl);
+      ctx.fillRect(0, 0, finalW, finalH);
+      ctx.drawImage(img, 0, 0, finalW, finalH);
 
-      const blob: Blob | null = await new Promise((resolve) =>
-        canvas.toBlob((b) => resolve(b), 'image/png'),
-      );
-      if (!blob) throw new Error('Xuất PNG thất bại');
+      // Xuất PNG qua toBlob. Một số trình duyệt vẫn fail khi area quá lớn
+      // (vd. iPad Safari cũ) — thử lại với scale thấp hơn trước khi bỏ cuộc.
+      let pngBlob: Blob | null = null;
+      for (const attempt of [scale, scale / 2, scale / 4, 1]) {
+        const aw = Math.max(1, Math.floor(layout.width * attempt));
+        const ah = Math.max(1, Math.floor(layout.height * attempt));
+        if (aw > MAX_DIM || ah > MAX_DIM) continue;
+        const c = document.createElement('canvas');
+        c.width = aw;
+        c.height = ah;
+        const cx = c.getContext('2d');
+        if (!cx) continue;
+        cx.fillStyle = '#fff7ed';
+        cx.fillRect(0, 0, aw, ah);
+        cx.drawImage(img, 0, 0, aw, ah);
+        pngBlob = await new Promise<Blob | null>((resolve) =>
+          c.toBlob((b) => resolve(b), 'image/png'),
+        );
+        if (pngBlob) break;
+      }
+
+      if (!pngBlob) {
+        // Fallback cuối: tải SVG về máy thay vì PNG.
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const dd = String(today.getDate()).padStart(2, '0');
+        const svgName = `cay-gia-pha-compact-${yyyy}-${mm}-${dd}.svg`;
+        const fallbackUrl = URL.createObjectURL(svgBlob);
+        const fallback = await fetch(svgString).then((r) => r.blob()).catch(() => svgBlob);
+        const fbUrl = URL.createObjectURL(fallback);
+        const a = document.createElement('a');
+        a.href = fbUrl;
+        a.download = svgName;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(fbUrl), 1000);
+        toast.warning(
+          'Ảnh PNG quá lớn, đã tải xuống định dạng SVG (có thể mở và in từ trình duyệt).',
+        );
+        return;
+      }
 
       const today = new Date();
       const yyyy = today.getFullYear();
@@ -1093,7 +1148,7 @@ export function CompactFamilyTree({ people, families, children }: Props) {
       const dd = String(today.getDate()).padStart(2, '0');
       const fileName = `cay-gia-pha-compact-${yyyy}-${mm}-${dd}.png`;
 
-      const url = URL.createObjectURL(blob);
+      const url = URL.createObjectURL(pngBlob);
       const a = document.createElement('a');
       a.href = url;
       a.download = fileName;
@@ -1101,9 +1156,16 @@ export function CompactFamilyTree({ people, families, children }: Props) {
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+      // Cảnh báo thân thiện nếu đã phải giảm chất lượng.
+      if (scale < REQUESTED_SCALE) {
+        toast.info(
+          `Cây quá lớn nên ảnh xuất ở mức ${Math.round(scale * 100)}% (thay vì ${REQUESTED_SCALE * 100}%).`,
+        );
+      }
     } catch (err) {
       console.error('[CompactFamilyTree] export PNG failed', err);
-      alert('Xuất ảnh thất bại. Vui lòng thử lại.');
+      toast.error('Xuất ảnh thất bại. Vui lòng thử lại hoặc dùng SVG.');
     } finally {
       setIsExporting(false);
     }
