@@ -667,16 +667,15 @@ function buildTreeLayout(
   }
 
   for (const familyChildren of childrenByFamily.values()) {
-    // CV1: sắp xếp theo sort_order, nếu bằng nhau thì tie-break theo birth_year.
+    // CV1: sắp xếp theo sort_order, nếu không có sort_order (cùng giá trị
+    // hoặc đều 9999) thì fallback theo created_at → id để ổn định giữa các lần render.
     // Sort_order = 9999 / null được coi là "chưa nhập" → sẽ rơi xuống cuối
     // (vì những người có sort_order thực sự sẽ có giá trị nhỏ hơn 9999).
     familyChildren.sort((a, b) => {
       if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
-      const pa = peopleById.get(a.person_id);
-      const pb = peopleById.get(b.person_id);
-      const ya = pa?.birth_year ?? 9999;
-      const yb = pb?.birth_year ?? 9999;
-      if (ya !== yb) return ya - yb;
+      const ca = a.created_at ?? '';
+      const cb = b.created_at ?? '';
+      if (ca !== cb) return ca.localeCompare(cb);
       return a.person_id.localeCompare(b.person_id);
     });
   }

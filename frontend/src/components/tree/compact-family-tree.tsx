@@ -148,46 +148,70 @@ export function buildCompactLayout(data: Props): {
     childrenByFamily.set(child.family_id, list);
   }
   for (const list of childrenByFamily.values()) {
+    // CV1: sắp xếp theo sort_order trước, nếu không có sort_order (cùng giá trị
+    // hoặc đều 9999) thì fallback theo created_at → id để ổn định giữa các lần render.
     list.sort((a, b) => {
       if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
-      const pa = peopleById.get(a.person_id);
-      const pb = peopleById.get(b.person_id);
-      const ya = pa?.birth_year ?? 9999;
-      const yb = pb?.birth_year ?? 9999;
-      if (ya !== yb) return ya - yb;
+      const ca = a.created_at ?? '';
+      const cb = b.created_at ?? '';
+      if (ca !== cb) return ca.localeCompare(cb);
       return a.person_id.localeCompare(b.person_id);
     });
   }
 
-  // anchor (chồng) → list family của anchor, sorted theo families.sort_order
-  const familiesByFather = new Map<string, Family[]>();
+  // Xác định anchor cho mỗi family: ưu tiên father_id nếu visible,
+  // ngược lại dùng mother_id. Đánh dấu person là "positioned-as-spouse"
+  // nếu họ là spouse trong 1 family có anchor visible (tức là sẽ được hiển thị
+  // bên cạnh anchor chứ không phải root riêng).
+  const familyAnchors = new Map<string, string>();
+  const familySpouses = new Map<string, string>();
+  const familiesByAnchor = new Map<string, Family[]>();
+  const positionedAsSpouse = new Set<string>();
+
   for (const f of families) {
-    if (!f.father_id) continue;
-    const list = familiesByFather.get(f.father_id) ?? [];
+    let anchorId: string | null = null;
+    if (f.father_id && visibleIds.has(f.father_id)) {
+      anchorId = f.father_id;
+    } else if (f.mother_id && visibleIds.has(f.mother_id)) {
+      anchorId = f.mother_id;
+    }
+    if (!anchorId) continue;
+
+    familyAnchors.set(f.id, anchorId);
+    const spouseId = f.father_id === anchorId ? f.mother_id : f.father_id;
+    if (spouseId) {
+      familySpouses.set(f.id, spouseId);
+      positionedAsSpouse.add(spouseId);
+    }
+    const list = familiesByAnchor.get(anchorId) ?? [];
     list.push(f);
-    familiesByFather.set(f.father_id, list);
+    familiesByAnchor.set(anchorId, list);
   }
-  for (const list of familiesByFather.values()) {
+
+  for (const list of familiesByAnchor.values()) {
     list.sort((a, b) => a.sort_order - b.sort_order);
   }
 
   // Xác định roots: person không phải con của bất kỳ family nào
-  // (parentless hoặc parent không visible)
-  const roots = people.filter(
-    (p) => !childToFamily.has(p.id) || !visibleIds.has(childToFamily.get(p.id)?.father_id ?? '')
-  );
+  // (parentless hoặc parent không visible), VÀ không phải spouse của anchor khác.
+  const roots = people.filter((p) => {
+    if (positionedAsSpouse.has(p.id)) return false;
+    const parentFamily = childToFamily.get(p.id);
+    const parentAnchorId = parentFamily ? familyAnchors.get(parentFamily.id) : undefined;
+    return !parentAnchorId || !visibleIds.has(parentAnchorId);
+  });
 
-  // Với mỗi root (anchor), thu thập các vợ = list mother_id trong tất cả families của anchor
+  // Với mỗi anchor, thu thập các spouse (có thể là vợ hoặc chồng tùy anchor)
   function getSpousesFor(anchorId: string): Person[] {
-    const list = familiesByFather.get(anchorId) ?? [];
-    const wives: Person[] = [];
+    const list = familiesByAnchor.get(anchorId) ?? [];
+    const spouses: Person[] = [];
     for (const f of list) {
-      if (f.mother_id) {
-        const w = peopleById.get(f.mother_id);
-        if (w && !wives.find((x) => x.id === w.id)) wives.push(w);
-      }
+      const sid = familySpouses.get(f.id);
+      if (!sid) continue;
+      const p = peopleById.get(sid);
+      if (p && !spouses.find((x) => x.id === p.id)) spouses.push(p);
     }
-    return wives;
+    return spouses;
   }
 
   // Subtree width cache
@@ -209,7 +233,7 @@ export function buildCompactLayout(data: Props): {
       return COUPLE_BOX_WIDTH;
     }
 
-    const fams = familiesByFather.get(anchorId) ?? [];
+    const fams = familiesByAnchor.get(anchorId) ?? [];
     let childrenBlockWidth = 0;
 
     fams.forEach((fam, idx) => {
@@ -222,7 +246,7 @@ export function buildCompactLayout(data: Props): {
         const anchor = peopleById.get(s.person_id);
         if (!anchor) return SON_NODE_WIDTH;
         // Nếu son đó cũng là father của family nào → tính recursively
-        if (familiesByFather.has(s.person_id)) {
+        if (familiesByAnchor.has(s.person_id)) {
           return computeSubtreeWidth(s.person_id);
         }
         return SON_NODE_WIDTH;
@@ -248,7 +272,7 @@ export function buildCompactLayout(data: Props): {
         const sons = kids.filter((c) => peopleById.get(c.person_id)?.gender === 1);
         const daughters = kids.filter((c) => peopleById.get(c.person_id)?.gender === 2);
         const sonWidths = sons.map((s) =>
-          familiesByFather.has(s.person_id)
+          familiesByAnchor.has(s.person_id)
             ? computeSubtreeWidth(s.person_id)
             : SON_NODE_WIDTH
         );
@@ -344,7 +368,7 @@ export function buildCompactLayout(data: Props): {
       height: cHeight,
     });
 
-    const fams = familiesByFather.get(anchorId) ?? [];
+    const fams = familiesByAnchor.get(anchorId) ?? [];
     if (fams.length === 0) return;
 
     // Tính block cho từng family của anchor
@@ -381,7 +405,7 @@ export function buildCompactLayout(data: Props): {
         const childGen = sonPerson?.generation ?? (anchor.generation ?? 1) + 1;
         const childY = levelY.get(childGen) ?? (coupleY + cHeight + LEVEL_GAP);
 
-        if (familiesByFather.has(son.person_id)) {
+        if (familiesByAnchor.has(son.person_id)) {
           // Son này cũng là father → để assignFor đệ quy tự tạo couple node
           // cho nó (không tạo son node ở đây để tránh đè).
           assignFor(son.person_id, sonCursor);
@@ -546,10 +570,12 @@ function serializeCompactLayoutToSvg(layout: ReturnType<typeof buildCompactLayou
       const meta = `Đời ${husband.generation}${husband.birth_year ? ` · ${husband.birth_year}` : ''}${!husband.is_living ? ' †' : ''}`;
       lines.push(`<text x="${centerX}" y="${y + height - 8}" text-anchor="middle" font-size="10" fill="#b45309">${esc(meta)}</text>`);
 
-      // Spouses (vợ) - chỉ chữ hồng, không nền, không viền
+      // Spouses (vợ hoặc chồng tùy anchor) - chỉ chữ hồng, không nền, không viền
+      const baseLabel = husband.gender === 2 ? 'Chồng' : 'Vợ';
       spouses.forEach((sp, idx) => {
         const sy = y + COUPLE_BOX_HEADER_HEIGHT + idx * COUPLE_BOX_HEIGHT_PER_SPOUSE;
-        const nameText = `${esc(sp.display_name)}`;
+        const labelText = spouses.length === 1 ? `${baseLabel}: ` : `${baseLabel} ${idx + 1}: `;
+        const nameText = `${esc(labelText)}${esc(sp.display_name)}`;
         const metaText = sp.birth_year ? esc(sp.birth_year.toString()) + (!sp.is_living ? ' †' : '') : (!sp.is_living ? '†' : '');
         const nameY = sy + COUPLE_BOX_HEIGHT_PER_SPOUSE / 2 + 4;
         lines.push(`<text x="${x + COUPLE_BOX_PADDING}" y="${nameY}" font-size="11" fill="#9d174d" font-weight="600">${nameText}</text>`);
@@ -713,12 +739,13 @@ function CompactCoupleNodeView({ node, onSelect }: CoupleNodeProps) {
         {`Đời ${husband.generation}`}{husband.tree_label ? ` · ${husband.tree_label}` : ''}
       </text>
 
-      {/* Wives - xếp dọc */}
-      {spouses.map((wife, idx) => {
+      {/* Spouses - xếp dọc. Label phụ thuộc giới tính anchor. */}
+      {spouses.map((spouse, idx) => {
         const lineY = coupleY + headerH + COUPLE_BOX_PADDING + idx * COUPLE_BOX_HEIGHT_PER_SPOUSE + 18;
-        const label = spouses.length === 1 ? 'Vợ' : `Vợ ${idx + 1}`;
+        const baseLabel = husband.gender === 2 ? 'Chồng' : 'Vợ';
+        const label = spouses.length === 1 ? baseLabel : `${baseLabel} ${idx + 1}`;
         return (
-          <g key={wife.id}>
+          <g key={spouse.id}>
             <text
               x={x + COUPLE_BOX_PADDING}
               y={lineY}
@@ -728,7 +755,7 @@ function CompactCoupleNodeView({ node, onSelect }: CoupleNodeProps) {
               style={{ userSelect: 'none' }}
             >
               <tspan fontSize={9} fill="#9a3412" fontWeight={600}>{label}: </tspan>
-              {wife.display_name.length > 22 ? `${wife.display_name.slice(0, 21)}…` : wife.display_name}
+              {spouse.display_name.length > 22 ? `${spouse.display_name.slice(0, 21)}…` : spouse.display_name}
             </text>
             <text
               x={x + width - COUPLE_BOX_PADDING}
@@ -738,7 +765,7 @@ function CompactCoupleNodeView({ node, onSelect }: CoupleNodeProps) {
               textAnchor="end"
               style={{ userSelect: 'none' }}
             >
-              {wife.birth_year ?? ''}{!wife.is_living ? ' †' : ''}
+              {spouse.birth_year ?? ''}{!spouse.is_living ? ' †' : ''}
             </text>
           </g>
         );
