@@ -19,6 +19,7 @@ import {
   ChevronsDownUp,
   Download,
   GitBranch,
+  Loader2,
   Maximize2,
   Minimize2,
   RotateCcw,
@@ -28,6 +29,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import type { Child, Family, Person } from '@/types';
+import { useTreeExportPng } from '@/hooks/use-tree-export-png';
 
 interface Props {
   people: Person[];
@@ -42,31 +44,38 @@ const COUPLE_BOX_PADDING = 8;
 const SON_NODE_WIDTH = 168;
 const SON_NODE_HEIGHT = 52;
 const DAUGHTER_CELL_WIDTH = 200;
-const DAUGHTER_CELL_ROW_HEIGHT = 22;
+const DAUGHTER_CELL_ROW_HEIGHT = 18; // đợt 13: sát lại (từ 22 → 18)
 const DAUGHTER_CELL_HEADER_HEIGHT = 0; // bỏ header "Con gái"
 const DAUGHTER_CELL_PADDING = 10;
 // Gap dọc tối thiểu giữa bottom couple ở gen X và top couple/son ở gen X+1.
 // Đường nối sẽ luôn chạm đáy ô cha (dùng coupleY + cHeight) và chạm top
 // ô con (dùng levelY[childGen]) → cả 2 đầu đều connect với node.
-const LEVEL_GAP = 48;
-const SIBLING_GAP = 20;
-const BRANCH_GAP = 60;
+// Đợt 7: giảm 32 → 24 cho đường zigzag gọn hơn nữa.
+const LEVEL_GAP = 24;
+const SIBLING_GAP = 14;
+const BRANCH_GAP = 10;
 const COUPLE_GAP = 28; // khoảng cách giữa các couple ngang hàng
 
 type CompactNodeKind = 'couple' | 'son' | 'daughter-cell';
 
-interface CompactCoupleNode {
+export interface CompactCoupleNode {
   kind: 'couple';
   id: string; // anchorId
   person: Person; // anchor (chồng hoặc người nối với cha mẹ)
-  spouses: Person[]; // các vợ (có thể rỗng)
+  /**
+   * Các vợ/chồng của anchor, kèm sort_order từ family để hiển thị đúng
+   * thứ tự vợ N / chồng N trùng với thứ tự admin đã nhập trong SpouseManagerDialog.
+   */
+  spouses: Array<{ person: Person; sortOrder: number }>;
+  familyId: string;
+  anchorId: string;
   x: number;
   y: number;
   width: number;
   height: number;
 }
 
-interface CompactSonNode {
+export interface CompactSonNode {
   kind: 'son';
   id: string; // person_id
   person: Person;
@@ -78,7 +87,7 @@ interface CompactSonNode {
   spouse?: Person; // nếu son có vợ chồng, hiển thị ở góc (nhỏ, optional MVP)
 }
 
-interface CompactDaughterCell {
+export interface CompactDaughterCell {
   kind: 'daughter-cell';
   id: string; // family.id
   familyId: string;
@@ -90,15 +99,23 @@ interface CompactDaughterCell {
   anchorId: string; // couple node cha
 }
 
-type CompactNode = CompactCoupleNode | CompactSonNode | CompactDaughterCell;
+export type CompactNode = CompactCoupleNode | CompactSonNode | CompactDaughterCell;
 
-interface Connection {
+export interface CompactConnection {
   id: string;
   x1: number;
   y1: number;
   x2: number;
   y2: number;
   type: 'parent-child';
+}
+
+export interface CompactLayout {
+  nodes: CompactNode[];
+  connections: CompactConnection[];
+  width: number;
+  height: number;
+  offsetX: number;
 }
 
 /** Tính kích thước couple box dựa trên số lượng vợ */
@@ -120,7 +137,7 @@ function getDaughterCellSize(daughterCount: number): { width: number; height: nu
 /** Build layout cho cây compact */
 export function buildCompactLayout(data: Props): {
   nodes: CompactNode[];
-  connections: Connection[];
+  connections: CompactConnection[];
   width: number;
   height: number;
   offsetX: number;
@@ -202,15 +219,18 @@ export function buildCompactLayout(data: Props): {
     return !parentAnchorId || !visibleIds.has(parentAnchorId);
   });
 
-  // Với mỗi anchor, thu thập các spouse (có thể là vợ hoặc chồng tùy anchor)
-  function getSpousesFor(anchorId: string): Person[] {
+  // Với mỗi anchor, thu thập các spouse (có thể là vợ hoặc chồng tùy anchor).
+  // Trả về cặp { person, sortOrder } để render đúng số thứ tự vợ N / chồng N.
+  function getSpousesFor(anchorId: string): Array<{ person: Person; sortOrder: number }> {
     const list = familiesByAnchor.get(anchorId) ?? [];
-    const spouses: Person[] = [];
+    const spouses: Array<{ person: Person; sortOrder: number }> = [];
     for (const f of list) {
       const sid = familySpouses.get(f.id);
       if (!sid) continue;
       const p = peopleById.get(sid);
-      if (p && !spouses.find((x) => x.id === p.id)) spouses.push(p);
+      if (p && !spouses.find((x) => x.person.id === p.id)) {
+        spouses.push({ person: p, sortOrder: f.sort_order });
+      }
     }
     return spouses;
   }
@@ -331,7 +351,7 @@ export function buildCompactLayout(data: Props): {
   // Assign positions
   const xPositions = new Map<string, number>(); // anchorId → startX
   const nodes: CompactNode[] = [];
-  const connections: Connection[] = [];
+  const connections: CompactConnection[] = [];
 
   // Track vị trí couple node để nối đường từ couple xuống con
   const coupleNodePos = new Map<string, { x: number; y: number; width: number; height: number }>();
@@ -363,6 +383,8 @@ export function buildCompactLayout(data: Props): {
       id: anchorId,
       person: anchor,
       spouses,
+      familyId: '', // sẽ được set ở dưới nếu fams.length > 0
+      anchorId,
       x: coupleX,
       y: coupleY,
       width: cWidth,
@@ -521,8 +543,11 @@ export function buildCompactLayout(data: Props): {
 }
 
 // Serialize một compact layout thành SVG string độc lập (không phụ thuộc transform CSS),
-// dùng cho chức năng xuất ảnh PNG. Áp dụng lại offsetX giống SVG hiển thị.
-function serializeCompactLayoutToSvg(layout: ReturnType<typeof buildCompactLayout>): string {
+// dùng cho chức năng xuất ảnh PNG của COMPACT view. Áp dụng lại offsetX giống SVG hiển thị.
+// LUÔN render compact style (ngang) cho mọi gen — đợt 14 fix lỗi trước đó
+// nhánh vertical style chen vào làm xoay text nam/couple trong ảnh compact.
+// Vertical view dùng `serializeVerticalLayoutToSvg` riêng.
+export function serializeCompactLayoutToSvg(layout: ReturnType<typeof buildCompactLayout>): string {
   const w = layout.width;
   const h = layout.height;
   const ox = layout.offsetX;
@@ -530,104 +555,126 @@ function serializeCompactLayoutToSvg(layout: ReturnType<typeof buildCompactLayou
   const esc = (s: string) =>
     s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-  const lines = [
+  const out: string[] = [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">`,
     `<rect width="100%" height="100%" fill="#fff7ed"/>`,
     `<g transform="translate(${ox}, 0)" font-family="ui-sans-serif, system-ui, sans-serif">`,
   ];
 
+  // Connections (giống UI).
   for (const c of layout.connections) {
-    lines.push(
+    out.push(
       `<path d="M ${c.x1} ${c.y1} L ${c.x1} ${(c.y1 + c.y2) / 2} L ${c.x2} ${(c.y1 + c.y2) / 2} L ${c.x2} ${c.y2}" fill="none" stroke="#eab308" stroke-width="2.5"/>`,
     );
   }
 
+  // Vertical style constants (không còn dùng ở đây — vertical view có serializer riêng).
+  // Giữ lại để nội bộ buildFamilyBlocks / VerticalFamilyTree không cần đụng đến.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _VERT_LEGACY = {
+    VERT_FROM_GEN: 6,
+    VERT_BG: '#f5deb3',
+    VERT_BORDER: '#a0522d',
+    VERT_SON_BG_M: '#eff6ff',
+    VERT_SON_BORDER_M: '#60a5fa',
+    VERT_DAUGHTER_BG_F: '#fff1f2',
+    VERT_DAUGHTER_BORDER_F: '#f472b6',
+    VERT_PADDING_X: 8,
+    VERT_PADDING_Y: 8,
+    VERT_COL_GAP: 8,
+    VERT_META_H: 16,
+    VERT_FONT: 13,
+    VERT_META_FONT: 11,
+    VERT_META_TEXT: '#78350f',
+  };
+  void _VERT_LEGACY;
+
   for (const node of layout.nodes) {
     if (node.kind === 'couple') {
+      // Compact style: ô chồng + danh sách vợ phía dưới.
       const { person: husband, spouses, x, y, width, height } = node;
-      const isMale = husband.gender === 1;
-      const fill = '#fef3c7';
-      const stroke = '#b45309';
-      lines.push(
-        `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="8" fill="${fill}" stroke="${stroke}" stroke-width="1.5"/>`,
+      out.push(
+        `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="8" fill="#fef3c7" stroke="#b45309" stroke-width="1.5"/>`,
       );
       const centerX = x + width / 2;
-      const linesName: string[] = [];
+      const nameLines: string[] = [];
       const name = husband.display_name;
       if (name.length > 22) {
         const mid = Math.ceil(name.length / 2);
         let cut = name.lastIndexOf(' ', mid);
         if (cut < 0) cut = mid;
-        linesName.push(name.slice(0, cut).trim(), name.slice(cut).trim());
+        nameLines.push(name.slice(0, cut).trim(), name.slice(cut).trim());
       } else {
-        linesName.push(name);
+        nameLines.push(name);
       }
-      if (linesName.length === 1) {
-        lines.push(`<text x="${centerX}" y="${y + 22}" text-anchor="middle" font-size="13" font-weight="700" fill="#1f2937">${esc(linesName[0])}</text>`);
+      if (nameLines.length === 1) {
+        out.push(`<text x="${centerX}" y="${y + 22}" text-anchor="middle" font-size="13" font-weight="700" fill="#1f2937">${esc(nameLines[0])}</text>`);
       } else {
-        lines.push(`<text x="${centerX}" y="${y + 18}" text-anchor="middle" font-size="12" font-weight="700" fill="#1f2937">${esc(linesName[0])}</text>`);
-        lines.push(`<text x="${centerX}" y="${y + 32}" text-anchor="middle" font-size="12" font-weight="700" fill="#1f2937">${esc(linesName[1])}</text>`);
+        out.push(`<text x="${centerX}" y="${y + 18}" text-anchor="middle" font-size="12" font-weight="700" fill="#1f2937">${esc(nameLines[0])}</text>`);
+        out.push(`<text x="${centerX}" y="${y + 32}" text-anchor="middle" font-size="12" font-weight="700" fill="#1f2937">${esc(nameLines[1])}</text>`);
       }
       const meta = `Đời ${husband.generation}${husband.birth_year ? ` · ${husband.birth_year}` : ''}${!husband.is_living ? ' †' : ''}`;
-      lines.push(`<text x="${centerX}" y="${y + height - 8}" text-anchor="middle" font-size="10" fill="#b45309">${esc(meta)}</text>`);
+      out.push(`<text x="${centerX}" y="${y + height - 8}" text-anchor="middle" font-size="10" fill="#b45309">${esc(meta)}</text>`);
 
-      // Spouses (vợ hoặc chồng tùy anchor) - chỉ chữ hồng, không nền, không viền
       const baseLabel = husband.gender === 2 ? 'Chồng' : 'Vợ';
       spouses.forEach((sp, idx) => {
         const sy = y + COUPLE_BOX_HEADER_HEIGHT + idx * COUPLE_BOX_HEIGHT_PER_SPOUSE;
-        const labelText = spouses.length === 1 ? `${baseLabel}: ` : `${baseLabel} ${idx + 1}: `;
-        const nameText = `${esc(labelText)}${esc(sp.display_name)}`;
-        const metaText = sp.birth_year ? esc(sp.birth_year.toString()) + (!sp.is_living ? ' †' : '') : (!sp.is_living ? '†' : '');
+        const labelText = spouses.length === 1 ? `${baseLabel}: ` : `${baseLabel} ${sp.sortOrder}: `;
+        const nameText = `${esc(labelText)}${esc(sp.person.display_name)}`;
+        const metaText = sp.person.birth_year
+          ? esc(sp.person.birth_year.toString()) + (!sp.person.is_living ? ' †' : '')
+          : (!sp.person.is_living ? '†' : '');
         const nameY = sy + COUPLE_BOX_HEIGHT_PER_SPOUSE / 2 + 4;
-        lines.push(`<text x="${x + COUPLE_BOX_PADDING}" y="${nameY}" font-size="11" fill="#9d174d" font-weight="600">${nameText}</text>`);
+        out.push(`<text x="${x + COUPLE_BOX_PADDING}" y="${nameY}" font-size="11" fill="#9d174d" font-weight="600">${nameText}</text>`);
         if (metaText) {
-          lines.push(`<text x="${x + width - COUPLE_BOX_PADDING}" y="${nameY}" font-size="11" fill="#9d174d" font-weight="600" text-anchor="end">${metaText}</text>`);
+          out.push(`<text x="${x + width - COUPLE_BOX_PADDING}" y="${nameY}" font-size="11" fill="#9d174d" font-weight="600" text-anchor="end">${metaText}</text>`);
         }
       });
     } else if (node.kind === 'son') {
+      // Compact style: ô vuông với tên + meta.
       const { person, x, y, width, height } = node;
       const isMale = person.gender === 1;
       const fill = isMale ? '#eff6ff' : '#fff1f2';
       const stroke = isMale ? '#60a5fa' : '#f472b6';
-      lines.push(`<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="8" fill="${fill}" stroke="${stroke}" stroke-width="1.5"/>`);
+      out.push(`<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="8" fill="${fill}" stroke="${stroke}" stroke-width="1.5"/>`);
       const centerX = x + width / 2;
-      const linesName: string[] = [];
+      const nameLines: string[] = [];
       const name = person.display_name;
       if (name.length > 22) {
         const mid = Math.ceil(name.length / 2);
         let cut = name.lastIndexOf(' ', mid);
         if (cut < 0) cut = mid;
-        linesName.push(name.slice(0, cut).trim(), name.slice(cut).trim());
+        nameLines.push(name.slice(0, cut).trim(), name.slice(cut).trim());
       } else {
-        linesName.push(name);
+        nameLines.push(name);
       }
-      if (linesName.length === 1) {
-        lines.push(`<text x="${centerX}" y="${y + 22}" text-anchor="middle" font-size="13" font-weight="600" fill="#1f2937">${esc(linesName[0])}</text>`);
+      if (nameLines.length === 1) {
+        out.push(`<text x="${centerX}" y="${y + 22}" text-anchor="middle" font-size="13" font-weight="600" fill="#1f2937">${esc(nameLines[0])}</text>`);
       } else {
-        lines.push(`<text x="${centerX}" y="${y + 18}" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2937">${esc(linesName[0])}</text>`);
-        lines.push(`<text x="${centerX}" y="${y + 32}" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2937">${esc(linesName[1])}</text>`);
+        out.push(`<text x="${centerX}" y="${y + 18}" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2937">${esc(nameLines[0])}</text>`);
+        out.push(`<text x="${centerX}" y="${y + 32}" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2937">${esc(nameLines[1])}</text>`);
       }
       const meta = `Đời ${person.generation}${person.birth_year ? ` · ${person.birth_year}` : ''}${!person.is_living ? ' †' : ''}`;
-      lines.push(`<text x="${centerX}" y="${y + height - 8}" text-anchor="middle" font-size="10" fill="${isMale ? '#60a5fa' : '#f472b6'}">${esc(meta)}</text>`);
+      out.push(`<text x="${centerX}" y="${y + height - 8}" text-anchor="middle" font-size="10" fill="${isMale ? '#60a5fa' : '#f472b6'}">${esc(meta)}</text>`);
     } else {
-      // daughter cell
+      // Daughter cell.
       const { daughters, x, y, width, height } = node;
-      lines.push(`<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="8" fill="#fff1f2" stroke="#f472b6" stroke-width="1.2"/>`);
+      out.push(`<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="8" fill="#fff1f2" stroke="#f472b6" stroke-width="1.2"/>`);
       const showBullet = daughters.length > 1;
       daughters.forEach((d, idx) => {
         const ly = y + DAUGHTER_CELL_PADDING + idx * DAUGHTER_CELL_ROW_HEIGHT + DAUGHTER_CELL_ROW_HEIGHT / 2 + 4;
         if (ly + 4 > y + height) return;
         if (showBullet) {
-          lines.push(`<circle cx="${x + 12}" cy="${ly - 4}" r="2" fill="#ec4899"/>`);
+          out.push(`<circle cx="${x + 12}" cy="${ly - 4}" r="2" fill="#ec4899"/>`);
         }
-        lines.push(`<text x="${x + (showBullet ? 20 : DAUGHTER_CELL_PADDING)}" y="${ly}" font-size="12" fill="#9d174d" font-weight="600">${esc(d.display_name.length > 22 ? `${d.display_name.slice(0, 21)}…` : d.display_name)}</text>`);
-        lines.push(`<text x="${x + width - DAUGHTER_CELL_PADDING}" y="${ly}" font-size="10" fill="#9d174d" opacity="0.7" text-anchor="end">${esc((d.birth_year ?? '?').toString())}${!d.is_living ? ' †' : ''}</text>`);
+        out.push(`<text x="${x + (showBullet ? 20 : DAUGHTER_CELL_PADDING)}" y="${ly}" font-size="12" fill="#9d174d" font-weight="600">${esc(d.display_name.length > 22 ? `${d.display_name.slice(0, 21)}…` : d.display_name)}</text>`);
+        out.push(`<text x="${x + width - DAUGHTER_CELL_PADDING}" y="${ly}" font-size="10" fill="#9d174d" opacity="0.7" text-anchor="end">${esc((d.birth_year ?? '?').toString())}${!d.is_living ? ' †' : ''}</text>`);
       });
     }
   }
 
-  lines.push(`</g></svg>`);
-  return lines.join('');
+  out.push(`</g></svg>`);
+  return out.join('');
 }
 
 // --- Render components ---
@@ -740,11 +787,12 @@ function CompactCoupleNodeView({ node, onSelect }: CoupleNodeProps) {
         {`Đời ${husband.generation}`}{husband.tree_label ? ` · ${husband.tree_label}` : ''}
       </text>
 
-      {/* Spouses - xếp dọc. Label phụ thuộc giới tính anchor. */}
-      {spouses.map((spouse, idx) => {
+      {/* Spouses - xếp dọc. Label phụ thuộc giới tính anchor và sort_order. */}
+      {spouses.map((entry, idx) => {
+        const { person: spouse, sortOrder } = entry;
         const lineY = coupleY + headerH + COUPLE_BOX_PADDING + idx * COUPLE_BOX_HEIGHT_PER_SPOUSE + 18;
         const baseLabel = husband.gender === 2 ? 'Chồng' : 'Vợ';
-        const label = spouses.length === 1 ? baseLabel : `${baseLabel} ${idx + 1}`;
+        const label = spouses.length === 1 ? baseLabel : `${baseLabel} ${sortOrder}`;
         return (
           <g key={spouse.id}>
             <text
@@ -951,7 +999,6 @@ export function CompactFamilyTree({ people, families, children }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ width: 800, height: 600 });
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
-  const [isExporting, setIsExporting] = useState(false);
 
   const data = useMemo(() => ({ people, families, children }), [people, families, children]);
 
@@ -1056,120 +1103,17 @@ export function CompactFamilyTree({ people, families, children }: Props) {
     currentPanRef.current = { x: 0, y: 0 };
   }, []);
 
-  const handleExportPng = useCallback(async () => {
-    if (isExporting || layout.nodes.length === 0) return;
-    setIsExporting(true);
-    try {
-      const svgString = serializeCompactLayoutToSvg(layout);
-
-      // Giới hạn canvas của trình duyệt:
-      //  - Chrome/Edge: width/height tối đa 32767, area tối đa ~268MP.
-      //  - Firefox: tối đa 32767 mỗi chiều, area 472907776.
-      // Khi vượt, canvas.toBlob() sẽ trả về null → "Xuất PNG thất bại".
-      // Ta giảm scale hoặc tile theo trục để luôn nằm trong giới hạn.
-      const MAX_DIM = 8192; // an toàn cho mọi trình duyệt kể cả mobile
-      const REQUESTED_SCALE = 2;
-
-      const targetWidth = layout.width * REQUESTED_SCALE;
-      const targetHeight = layout.height * REQUESTED_SCALE;
-      const scale = Math.min(REQUESTED_SCALE, MAX_DIM / layout.width, MAX_DIM / layout.height);
-      const finalW = Math.floor(layout.width * scale);
-      const finalH = Math.floor(layout.height * scale);
-
-      const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
-      const svgUrl = URL.createObjectURL(svgBlob);
-
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      await new Promise<void>((resolve, reject) => {
-        img.onload = () => resolve();
-        img.onerror = () => reject(new Error('Không thể render SVG'));
-        img.src = svgUrl;
-      });
-      URL.revokeObjectURL(svgUrl);
-
-      // Vẽ SVG lên canvas đúng cỡ mong muốn (đã kẹp scale).
-      const canvas = document.createElement('canvas');
-      canvas.width = finalW;
-      canvas.height = finalH;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) throw new Error('Canvas không khả dụng');
-      ctx.fillStyle = '#fff7ed';
-      ctx.fillRect(0, 0, finalW, finalH);
-      ctx.drawImage(img, 0, 0, finalW, finalH);
-
-      // Xuất PNG qua toBlob. Một số trình duyệt vẫn fail khi area quá lớn
-      // (vd. iPad Safari cũ) — thử lại với scale thấp hơn trước khi bỏ cuộc.
-      let pngBlob: Blob | null = null;
-      for (const attempt of [scale, scale / 2, scale / 4, 1]) {
-        const aw = Math.max(1, Math.floor(layout.width * attempt));
-        const ah = Math.max(1, Math.floor(layout.height * attempt));
-        if (aw > MAX_DIM || ah > MAX_DIM) continue;
-        const c = document.createElement('canvas');
-        c.width = aw;
-        c.height = ah;
-        const cx = c.getContext('2d');
-        if (!cx) continue;
-        cx.fillStyle = '#fff7ed';
-        cx.fillRect(0, 0, aw, ah);
-        cx.drawImage(img, 0, 0, aw, ah);
-        pngBlob = await new Promise<Blob | null>((resolve) =>
-          c.toBlob((b) => resolve(b), 'image/png'),
-        );
-        if (pngBlob) break;
-      }
-
-      if (!pngBlob) {
-        // Fallback cuối: tải SVG về máy thay vì PNG.
-        const today = new Date();
-        const yyyy = today.getFullYear();
-        const mm = String(today.getMonth() + 1).padStart(2, '0');
-        const dd = String(today.getDate()).padStart(2, '0');
-        const svgName = `cay-gia-pha-compact-${yyyy}-${mm}-${dd}.svg`;
-        const fallbackUrl = URL.createObjectURL(svgBlob);
-        const fallback = await fetch(svgString).then((r) => r.blob()).catch(() => svgBlob);
-        const fbUrl = URL.createObjectURL(fallback);
-        const a = document.createElement('a');
-        a.href = fbUrl;
-        a.download = svgName;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(() => URL.revokeObjectURL(fbUrl), 1000);
-        toast.warning(
-          'Ảnh PNG quá lớn, đã tải xuống định dạng SVG (có thể mở và in từ trình duyệt).',
-        );
-        return;
-      }
-
-      const today = new Date();
-      const yyyy = today.getFullYear();
-      const mm = String(today.getMonth() + 1).padStart(2, '0');
-      const dd = String(today.getDate()).padStart(2, '0');
-      const fileName = `cay-gia-pha-compact-${yyyy}-${mm}-${dd}.png`;
-
-      const url = URL.createObjectURL(pngBlob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-
-      // Cảnh báo thân thiện nếu đã phải giảm chất lượng.
-      if (scale < REQUESTED_SCALE) {
-        toast.info(
-          `Cây quá lớn nên ảnh xuất ở mức ${Math.round(scale * 100)}% (thay vì ${REQUESTED_SCALE * 100}%).`,
-        );
-      }
-    } catch (err) {
-      console.error('[CompactFamilyTree] export PNG failed', err);
-      toast.error('Xuất ảnh thất bại. Vui lòng thử lại hoặc dùng SVG.');
-    } finally {
-      setIsExporting(false);
-    }
-  }, [isExporting, layout]);
+  // Serialize trong hook phải ổn định (không phụ thuộc state) để useCallback không re-fire.
+  const serializeSvg = useCallback(
+    () => serializeCompactLayoutToSvg(layout),
+    [layout],
+  );
+  const { isExporting, exportPng } = useTreeExportPng({
+    serializeSvg,
+    width: layout.width,
+    height: layout.height,
+    fileNamePrefix: 'cay-gia-pha-compact',
+  });
 
   if (layout.nodes.length === 0) {
     return (
@@ -1205,12 +1149,16 @@ export function CompactFamilyTree({ people, families, children }: Props) {
             variant="ghost"
             size="icon"
             className="h-7 w-7"
-            onClick={handleExportPng}
+            onClick={exportPng}
             disabled={isExporting}
             aria-label="Xuất ảnh PNG"
             title="Xuất ảnh PNG"
           >
-            <Download className="h-4 w-4" />
+            {isExporting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
           </Button>
         </div>
       </div>

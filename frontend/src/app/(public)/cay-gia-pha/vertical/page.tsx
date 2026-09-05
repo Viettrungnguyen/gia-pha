@@ -1,9 +1,9 @@
 /**
  * @project NguyenDinhHoaNgai
- * @file src/app/(public)/cay-gia-pha/compact/page.tsx
- * @description Trang cây gia phả dạng compact (gộp vợ chồng + ô con gái)
+ * @file src/app/(public)/cay-gia-pha/vertical/page.tsx
+ * @description Trang cây gia phả dạng "dọc" (đời 1-5 giống compact, đời 6+ rải chữ dọc)
  * @version 1.0.0
- * @updated 2026-09-05
+ * @updated 2026-09-06
  */
 
 'use client';
@@ -16,10 +16,10 @@ import { Button } from '@/components/ui/button';
 import { GitBranchPlus, List, ArrowLeft } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 
-const CompactFamilyTree = dynamic(
+const VerticalFamilyTree = dynamic(
   () =>
-    import('@/components/tree/compact-family-tree').then(
-      (m) => m.CompactFamilyTree
+    import('@/components/tree/vertical-family-tree').then(
+      (m) => m.VerticalFamilyTree
     ),
   {
     ssr: false,
@@ -27,7 +27,7 @@ const CompactFamilyTree = dynamic(
   }
 );
 
-export default function CayGiaPhaCompactPage() {
+export default function CayGiaPhaVerticalPage() {
   const { data, isLoading, error } = useTreeData();
 
   if (error) {
@@ -50,10 +50,10 @@ export default function CayGiaPhaCompactPage() {
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold text-primary">
             <GitBranchPlus className="h-6 w-6" />
-            Cây Gia Phả (Compact)
+            Cây Gia Phả (Dọc)
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Dạng gộp: 1 ô chồng + các vợ xếp dọc · con trai ô riêng · con gái gộp ô
+            Đời 1-5: giống compact · Đời 6+: ô couple có viền, tên chồng (xanh) + vợ (hồng) + Đời, rải chữ theo chiều dọc
           </p>
         </div>
         <div className="flex gap-1 rounded-md border p-1">
@@ -63,13 +63,13 @@ export default function CayGiaPhaCompactPage() {
             </Link>
           </Button>
           <Button asChild variant="ghost" size="sm">
-            <Link href="/cay-gia-pha">
-              <List className="mr-1 h-4 w-4" /> Danh sách
+            <Link href="/cay-gia-pha/compact">
+              <GitBranchPlus className="mr-1 h-4 w-4" /> Compact
             </Link>
           </Button>
-          <Button asChild variant="ghost" size="sm" aria-label="Cây dọc">
-            <Link href="/cay-gia-pha/vertical">
-              <GitBranchPlus className="mr-1 h-4 w-4" /> Dọc
+          <Button asChild variant="ghost" size="sm" aria-label="Danh sách">
+            <Link href="/cay-gia-pha">
+              <List className="mr-1 h-4 w-4" /> Danh sách
             </Link>
           </Button>
         </div>
@@ -78,7 +78,7 @@ export default function CayGiaPhaCompactPage() {
       {isLoading || !data ? (
         <Skeleton className="h-[70vh] w-full" />
       ) : (
-        <CompactFamilyTree
+        <VerticalFamilyTree
           people={data.people}
           families={data.families}
           children={data.children}
@@ -88,10 +88,12 @@ export default function CayGiaPhaCompactPage() {
       <Card className="mt-6">
         <CardContent className="space-y-2 py-4 text-sm text-muted-foreground">
           <p>
-            <strong>Cây compact</strong> giúp nhìn tổng quan nhanh hơn: các vợ của
-            cùng 1 ông hiển thị dọc trong cùng ô couple, các con gái gộp chung vào
-            1 ô để tiết kiệm không gian. Click vào tên trong ô con gái để xem
-            chi tiết.
+            <strong>Cây dọc</strong> từ đời 6 trở đi đổi cách hiển thị: ô couple
+            chỉ giữ viền (background trong suốt), tên chồng và vợ được tách
+            thành từng từ và xếp dọc từ trên xuống — chồng viết dọc trái
+            (màu xanh), vợ viết dọc phía sau (màu hồng). Mỗi người có dòng
+            <em> Đời N</em> riêng. Ô con trai và ô con gái cũng rải tên theo
+            chiều dọc.
           </p>
         </CardContent>
       </Card>

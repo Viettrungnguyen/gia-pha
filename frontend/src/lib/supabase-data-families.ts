@@ -17,14 +17,19 @@ export interface TreeData {
 
 export async function getTreeData(): Promise<TreeData> {
   // Dev-only fake tree (Local): bật bằng NEXT_PUBLIC_USE_FAKE_TREE trong .env.local.
-  //  'compact' → mini tree test cho cây compact (CV2)
-  //  '1'      → big tree ~500 người (kiểm thử cây lớn)
+  //  'compact'  → mini tree 5 đời (kiểm thử cây compact CV2)
+  //  'vertical' → mini tree 7 đời (kiểm thử cây dọc: 1-5 giống compact, 6-7 view dọc)
+  //  '1'        → big tree ~500 người (kiểm thử cây lớn)
   // Cờ NODE_ENV đảm bảo production build của Vercel không bao giờ gọi fake data,
   // ngay cả khi env lỡ bị set.
   if (process.env.NODE_ENV !== 'production') {
     if (process.env.NEXT_PUBLIC_USE_FAKE_TREE === 'compact') {
       const { generateCompactFakeTree } = await import('@/lib/dev-fake-compact-tree');
       return generateCompactFakeTree();
+    }
+    if (process.env.NEXT_PUBLIC_USE_FAKE_TREE === 'vertical') {
+      const { generateVerticalFakeTree } = await import('@/lib/dev-fake-vertical-tree');
+      return generateVerticalFakeTree();
     }
     if (process.env.NEXT_PUBLIC_USE_FAKE_TREE === '1') {
       const { generateFakeTree } = await import('@/lib/dev-fake-tree');

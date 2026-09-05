@@ -66,6 +66,11 @@ export default function CayGiaPhaPage() {
               <GitBranchPlus className="mr-1 h-4 w-4" /> Compact
             </Link>
           </Button>
+          <Button asChild variant="ghost" size="sm" aria-label="Cây dọc">
+            <Link href="/cay-gia-pha/vertical">
+              <GitBranchPlus className="mr-1 h-4 w-4" /> Dọc
+            </Link>
+          </Button>
         </div>
       </div>
 
