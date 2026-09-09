@@ -37,13 +37,13 @@ interface Props {
   children: Child[];
 }
 
-const COUPLE_BOX_WIDTH = 185;
+const COUPLE_BOX_WIDTH = 195; // đợt 15: tăng +10 cho tên dài hơn
 const COUPLE_BOX_HEIGHT_PER_SPOUSE = 26;
 const COUPLE_BOX_HEADER_HEIGHT = 40;
 const COUPLE_BOX_PADDING = 8;
-const SON_NODE_WIDTH = 168;
+const SON_NODE_WIDTH = 178; // đợt 15: tăng +10 cho tên dài hơn
 const SON_NODE_HEIGHT = 52;
-const DAUGHTER_CELL_WIDTH = 200;
+const DAUGHTER_CELL_WIDTH = 210; // đợt 15: tăng +10 cho tên dài hơn
 const DAUGHTER_CELL_ROW_HEIGHT = 18; // đợt 13: sát lại (từ 22 → 18)
 const DAUGHTER_CELL_HEADER_HEIGHT = 0; // bỏ header "Con gái"
 const DAUGHTER_CELL_PADDING = 10;
@@ -128,7 +128,7 @@ function getCoupleBoxSize(spouseCount: number): { width: number; height: number 
 
 function getDaughterCellSize(daughterCount: number): { width: number; height: number } {
   return {
-    width: 185,
+    width: 195, // đợt 15: đồng bộ với COUPLE_BOX_WIDTH
     // bỏ header → chỉ còn padding + từng dòng con gái
     height: DAUGHTER_CELL_PADDING * 2 + DAUGHTER_CELL_ROW_HEIGHT * Math.max(1, daughterCount),
   };
@@ -1075,8 +1075,135 @@ export function CompactFamilyTree({ people, families, children }: Props) {
 
     const container = containerRef.current!;
     container.addEventListener('wheel', onWheel, { passive: false });
+
+    // Touch handlers for mobile pan & pinch-to-zoom
+    const TOUCH_PINCH_THRESHOLD = 2;
+    const TOUCH_MOVE_THRESHOLD = 6;
+    let pinchStart: {
+      distance: number;
+      centerX: number;
+      centerY: number;
+      scale: number;
+      pan: { x: number; y: number };
+    } | null = null;
+    let touchPanStart: { x: number; y: number; pan: { x: number; y: number } } | null = null;
+    let touchMoved = false;
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === TOUCH_PINCH_THRESHOLD) {
+        pinchStart = {
+          distance: Math.hypot(
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY
+          ),
+          centerX: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+          centerY: (e.touches[0].clientY + e.touches[1].clientY) / 2,
+          scale: targetScaleRef.current,
+          pan: { ...targetPanRef.current },
+        };
+        touchPanStart = null;
+        touchMoved = false;
+        return;
+      }
+
+      if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        touchPanStart = {
+          x: touch.clientX,
+          y: touch.clientY,
+          pan: { ...targetPanRef.current },
+        };
+        touchMoved = false;
+        pinchStart = null;
+        return;
+      }
+
+      touchPanStart = null;
+      pinchStart = null;
+      touchMoved = false;
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (pinchStart && e.touches.length === TOUCH_PINCH_THRESHOLD) {
+        e.preventDefault();
+        const [t1, t2] = Array.from(e.touches);
+        const cx = (t1.clientX + t2.clientX) / 2;
+        const cy = (t1.clientY + t2.clientY) / 2;
+        const distance = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+        if (distance < 1) return;
+        const ratio = distance / pinchStart.distance;
+        const nextScale = Math.min(2, Math.max(0.3, pinchStart.scale * ratio));
+        const rect = container.getBoundingClientRect();
+        const pointX = cx - rect.left;
+        const pointY = cy - rect.top;
+        const worldX = (pointX - pinchStart.pan.x) / pinchStart.scale;
+        const worldY = (pointY - pinchStart.pan.y) / pinchStart.scale;
+        const nextPan = {
+          x: pointX - worldX * nextScale,
+          y: pointY - worldY * nextScale,
+        };
+        targetScaleRef.current = nextScale;
+        targetPanRef.current = nextPan;
+        currentScaleRef.current = nextScale;
+        currentPanRef.current = nextPan;
+        setScale(nextScale);
+        setPan(nextPan);
+        touchPanStart = null;
+        return;
+      }
+
+      if (!touchPanStart || e.touches.length !== 1) return;
+
+      const touch = e.touches[0];
+      const dx = touch.clientX - touchPanStart.x;
+      const dy = touch.clientY - touchPanStart.y;
+
+      if (!touchMoved) {
+        if (Math.hypot(dx, dy) < TOUCH_MOVE_THRESHOLD) return;
+        touchMoved = true;
+      }
+
+      e.preventDefault();
+      const nextPan = { x: touchPanStart.pan.x + dx, y: touchPanStart.pan.y + dy };
+      targetPanRef.current = nextPan;
+      currentPanRef.current = nextPan;
+      setPan(nextPan);
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length === 0) {
+        pinchStart = null;
+        touchPanStart = null;
+        touchMoved = false;
+        return;
+      }
+
+      if (e.touches.length < TOUCH_PINCH_THRESHOLD) {
+        pinchStart = null;
+      }
+
+      if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        touchPanStart = {
+          x: touch.clientX,
+          y: touch.clientY,
+          pan: { ...targetPanRef.current },
+        };
+        touchMoved = false;
+      }
+    };
+
+    container.addEventListener('touchstart', onTouchStart, { passive: false });
+    container.addEventListener('touchmove', onTouchMove, { passive: false });
+    container.addEventListener('touchend', onTouchEnd, { passive: false });
+    container.addEventListener('touchcancel', onTouchEnd, { passive: false });
+
     return () => {
       container.removeEventListener('wheel', onWheel);
+      container.removeEventListener('touchstart', onTouchStart);
+      container.removeEventListener('touchmove', onTouchMove);
+      container.removeEventListener('touchend', onTouchEnd);
+      container.removeEventListener('touchcancel', onTouchEnd);
       if (animFrameRef.current !== null) cancelAnimationFrame(animFrameRef.current);
     };
   }, []);
