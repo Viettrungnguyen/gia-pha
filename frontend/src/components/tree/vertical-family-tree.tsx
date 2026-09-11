@@ -73,7 +73,7 @@ const VERTICAL_PADDING_Y = 8;
 /** Bề rộng tối thiểu của ô couple (đợt 10: giảm 110 → 84 cho couple 1 người gọn hơn; đợt 15: tăng +10 → 74 để cân đối với VERTICAL_COLUMN_WIDTH = 36). */
 const VERTICAL_COUPLE_BOX_MIN_WIDTH = 74;
 /** Chiều cao cố định của ô couple / son / daughter (đồng đều, dễ nhìn). */
-const VERTICAL_BOX_HEIGHT = 168;
+const VERTICAL_BOX_HEIGHT = 180;
 /** Khoảng cách giữa các đời đứng cạnh nhau (sibling). */
 const VERTICAL_SIBLING_GAP = 4;
 /** Khoảng cách giữa các nhánh (giữa các khối family của cùng 1 cha). */
